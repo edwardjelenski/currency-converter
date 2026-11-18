@@ -1,5 +1,7 @@
 # Currency Converter
 
+[![CI](https://github.com/edwardjelenski/currency-converter/actions/workflows/ci.yml/badge.svg)](https://github.com/edwardjelenski/currency-converter/actions/workflows/ci.yml)
+
 Мобильное приложение-конвертер валют (iOS) с собственной серверной частью.
 Учебный проект: разработка с ИИ-агентом, ход работы задокументирован в
 [PROMPTS.md](PROMPTS.md), [REFLECTION.md](REFLECTION.md) и [.agent/](.agent).

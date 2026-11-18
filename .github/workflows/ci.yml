@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server · swift test on Linux
+    runs-on: ubuntu-latest
+    # Same toolchain image as the Dockerfile's build stage.
+    container: swift:6.4-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # The sync schedule runs on Europe/Berlin time; the base image has no zone data.
+      - name: Install time zone data
+        run: apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -yq tzdata
+
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: server-linux-${{ hashFiles('Package.resolved') }}
+          restore-keys: server-linux-
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test --skip-build
+
+  docker:
+    name: Server · Docker Compose (build, healthy, down/up)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions
+        run: docker version --format '{{.Server.Version}}' && docker compose version
+
+      # Builds the image from scratch, waits for the healthcheck, restarts with
+      # down/up and checks the stored days survived. See the script for details.
+      - name: Verify Docker setup
+        run: scripts/verify-docker.sh
+
+  ios:
+    name: iOS · xcodegen + tests on simulator
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        working-directory: src/ios
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          ios = sorted((r for r in devices if ".iOS-" in r), key=lambda r: [int(x) for x in r.split(".iOS-")[1].split("-")], reverse=True)
+          for runtime in ios:
+              for d in devices[runtime]:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); print(runtime, d["name"], file=sys.stderr); sys.exit()
+          sys.exit("no iPhone simulator found")')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      # Coverage and parallel testing off: with them xcodebuild sometimes hangs after
+      # the tests have finished (see .agent/errors.md #3).
+      - name: Test
+        working-directory: src/ios
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project CurrencyConverter.xcodeproj \
+            -scheme CurrencyConverter \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -enableCodeCoverage NO \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults.xcresult \
+            | grep -vE '^\s*$' | tail -n 150
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: src/ios/TestResults.xcresult
