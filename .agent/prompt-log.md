@@ -395,3 +395,33 @@ services/RatesAPI.swift, preview/PreviewData.swift}`, `tests/ios/{LocalizationTe
 **Коммиты:** `295ec9a` Polish the UI: big monospaced amounts, swap haptic, layouts up to AX5 ·
 `97f0217` Localize the app into Russian with String Catalogs · `10ccc49` Make tests language-independent and test the Russian bundle ·
 Document localization, dark mode and Dynamic Type
+
+---
+
+## 12. 2026-11-18 23:31
+
+**Запрос:**
+
+```text
+общие тест-векторы кросс курсов в tests/fixtures/cross-rates.json, гоняй их и на сервере и в ios. плюс ios тесты на ServerRatesAPI (мок HTTPClient: URL, If-None-Match, 304, ошибки, строки в Decimal) и на вьюмодели истории и избранного (мок RatesAPI)
+```
+
+**Что сделано:**
+- `tests/fixtures/cross-rates.json`: реальные курсы ЕЦБ за 2026-11-18 (из базы сервера), 16 кросс-курсов и
+  8 конвертаций; ожидания посчитаны Python `decimal`; правила (EUR — как опубликовано, кросс — 6 значащих,
+  та же валюта — 1, неизвестная — null) записаны в самом файле
+- Сервер: векторы через `/rates` и `/timeseries` на засеянной базе (29 случаев)
+- iOS: фикстура — ресурс тестового бандла через `project.yml`; кросс-курсы на `ExchangeRates`, конвертации
+  через всю цепочку клиента
+- Проверка «на порчу» обеих сторон: изменённое значение роняет ровно свой вектор; фикстура восстановлена
+- Большая часть запрошенных iOS-тестов уже была (шаги 4–6); дописаны пробелы: `Accept`, сетевые ошибки,
+  мусор при 200, 26-значный курс без потерь, ошибки `/timeseries`; повторное открытие истории офлайн;
+  избранное после обновления курсов и без курсов
+- Итого: сервер 54 теста, iOS 88, все проходят, без предупреждений; ошибок агента на этом шаге не было
+
+**Файлы:** `tests/fixtures/cross-rates.json`, `tests/server/CrossRateVectorTests.swift`, `tests/ios/{CrossRateVectorTests,
+TestDoubles, ServerRatesAPITests, RateHistoryViewModelTests, FavoritesTests}.swift`, `src/ios/project.yml`,
+`README.md`, `docs/architecture.md`, `.agent/prompt-log.md`
+
+**Коммиты:** `58b121e` Share cross-rate test vectors between server and iOS ·
+`e8accfe` Cover remaining API client and view model cases · Document shared test vectors

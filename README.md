@@ -55,6 +55,7 @@
 │   │       └── preview/         тестовые данные для #Preview (только Debug)
 │   └── server/App/              сервер: entrypoint, controllers/, services/, models/, migrations/, utils/
 ├── tests/
+│   ├── fixtures/                cross-rates.json — общие тест-векторы кросс-курсов
 │   ├── ios/                     unit-тесты клиента (Swift Testing)
 │   └── server/                  тесты сервера (Swift Testing)
 ├── Dockerfile                   сборка образа сервера (multistage)
@@ -138,6 +139,10 @@ swift run App serve
 ```bash
 swift test
 ```
+
+Кросс-курсы обе стороны проверяют по одному файлу `tests/fixtures/cross-rates.json`: реальные курсы ЕЦБ
+и ожидаемые значения, посчитанные Python `decimal`. Сервер прогоняет их через `/rates` и `/timeseries`,
+iOS — через `ExchangeRates` и всю цепочку клиента (JSON → `ServerRatesAPI` → модель экрана).
 
 ### REST API
 
