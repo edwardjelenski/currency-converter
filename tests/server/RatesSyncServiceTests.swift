@@ -142,3 +142,28 @@ struct RatesSyncServiceTests {
         }
     }
 }
+
+@Suite(.serialized)
+struct HolidaySyncTests {
+    @Test func catchUpOverChristmasStoresOnlyPublicationDays() async throws {
+        // TARGET holidays: 25 and 26 December, 1 January.
+        let holidays: Set<RateDate> = [date("2025-12-25"), date("2025-12-26"), date("2026-01-01")]
+        try await withTestApp { app in
+            let clock = TestClock(berlinTime(2025, 12, 23, 17))
+            let upstream = PublishingUpstream(clock: clock, holidays: holidays)
+            let service = RatesSyncService(database: { app.db }, upstream: upstream, backfillDays: 5, timeZone: berlin, now: { clock.now }, logger: app.logger)
+            try await service.sync(trigger: .startup)
+
+            clock.set(berlinTime(2026, 1, 2, 17))
+            let outcome = try await service.sync(trigger: .startup)
+
+            #expect(outcome.requestedRange == date("2025-12-24")...date("2026-01-02"))
+            // 24, 29, 30, 31 December and 2 January.
+            #expect(outcome.datesAdded == 5)
+            let store = RatesStore(database: app.db)
+            for holiday in holidays {
+                #expect(try await store.rates(on: holiday).isEmpty)
+            }
+        }
+    }
+}
