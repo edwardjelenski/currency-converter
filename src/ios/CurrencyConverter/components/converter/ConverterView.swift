@@ -23,7 +23,7 @@ struct ConverterView: View {
                 }
             }
             .navigationTitle("Converter")
-            .background(Color(.systemGroupedBackground))
+            .background(Theme.background)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -72,7 +72,7 @@ struct ConverterView: View {
                     .keyboardType(.decimalPad)
                     .focused($amountFocused)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(.title, design: .rounded, weight: .semibold))
+                    .font(Theme.amountFont)
                     .accessibilityLabel("Amount in \(model.source.code)")
             }
 
@@ -80,7 +80,7 @@ struct ConverterView: View {
                 picking = .target
             } value: {
                 Text(model.formattedResult)
-                    .font(.system(.title, design: .rounded, weight: .semibold))
+                    .font(Theme.amountFont)
                     .foregroundStyle(.tint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
@@ -98,7 +98,7 @@ struct ConverterView: View {
                     .frame(width: 44, height: 44)
                     .background(.tint, in: .circle)
                     .foregroundStyle(.white)
-                    .overlay(Circle().stroke(Color(.systemGroupedBackground), lineWidth: 4))
+                    .overlay(Circle().stroke(Theme.background, lineWidth: 4))
             }
             .accessibilityLabel("Swap currencies")
         }
@@ -147,7 +147,7 @@ struct ConverterView: View {
                         }
                     }
                 }
-                .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.listCornerRadius))
             }
         }
     }
@@ -161,101 +161,6 @@ struct ConverterView: View {
             Button("Try Again") { Task { await model.refresh() } }
                 .buttonStyle(.borderedProminent)
         }
-    }
-}
-
-// MARK: - Subviews
-
-private struct CurrencyCard<Value: View>: View {
-    let title: LocalizedStringKey
-    let currency: Currency
-    let pick: () -> Void
-    @ViewBuilder let value: () -> Value
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Button(action: pick) {
-                    HStack(spacing: 8) {
-                        Text(currency.flag).font(.title2)
-                        Text(currency.code).font(.headline)
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.tertiarySystemFill), in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(currency.name()), change currency")
-
-                value()
-            }
-            Text(currency.name())
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 20))
-    }
-}
-
-private struct ConversionRow: View {
-    let currency: Currency
-    let amount: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(currency.flag)
-                .font(.title2)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(currency.code).font(.body.weight(.medium))
-                Text(currency.name())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Text(amount)
-                .font(.body.monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .contentShape(.rect)
-    }
-}
-
-private struct OfflineBanner: View {
-    let message: String
-    let fetchedAt: Date?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Couldn't update rates").font(.subheadline.weight(.semibold))
-                if let fetchedAt {
-                    Text("Showing rates saved \(fetchedAt.formatted(.relative(presentation: .named))).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding()
-        .background(.orange.opacity(0.12), in: .rect(cornerRadius: 16))
     }
 }
 

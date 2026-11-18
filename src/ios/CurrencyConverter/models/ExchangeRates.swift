@@ -39,10 +39,3 @@ struct ExchangeRates: Codable, Hashable, Sendable {
         try? Date(date, strategy: Date.ISO8601FormatStyle().year().month().day())
     }
 }
-
-private extension Array where Element: Hashable {
-    func uniqued() -> [Element] {
-        var seen = Set<Element>()
-        return filter { seen.insert($0).inserted }
-    }
-}

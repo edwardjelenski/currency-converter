@@ -1,3 +1,4 @@
+# XcodeGen spec for the iOS client. Run `xcodegen generate` from src/ios.
 name: CurrencyConverter
 
 options:
@@ -46,7 +47,9 @@ targets:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: CurrencyConverterTests
+      # Tests live outside the iOS folder, in <repo>/tests/ios.
+      - path: ../../tests/ios
+        name: CurrencyConverterTests
     dependencies:
       - target: CurrencyConverter
     settings:
