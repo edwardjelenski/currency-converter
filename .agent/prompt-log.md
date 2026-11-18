@@ -124,3 +124,35 @@ project-root/:
 **Файлы:** `.agent/prompt-log.md`, `.agent/errors.md`, `.agent/config.json`, `CLAUDE.md`, `REFLECTION.md`
 
 **Коммиты:** Log every agent request and error in .agent
+
+---
+
+## 4. 2026-11-18 20:16
+
+**Запрос:**
+
+```text
+архитектура:
+
+- бэк: /currencies, /rates?base=, /timeseries?base=&symbols=&start=&end=. обновление курсов по расписанию (ECB публикует раз в день по будням), история в sqlite, ETag/Cache-Control чтоб клиент не тянул лишнее
+- ios: @Observable вьюмодели, сетевой слой за протоколом чтоб мокать, деньги только Decimal, оффлайн кеш последнего ответа
+- кросс курсы считать на клиенте от одной базы или на бэке - предложи и обоснуй
+
+оформи в docs/architecture.md, схема компонентов на mermaid + потоки данных
+```
+
+**Что сделано:**
+- Проверил у Frankfurter: таймсерия за год отдаётся по дням (256 рабочих дней) одним запросом,
+  в ответах есть `ETag` и `Cache-Control` — на этом построены бэкфилл и условные запросы сервера
+- Переписал `docs/architecture.md`: схема компонентов, сравнение вариантов расчёта кросс-курсов
+  и решение (гибрид: сервер умеет `base`, конвертер считает от EUR на клиенте, история — на сервере),
+  контракт REST API с ошибками, политика ETag/Cache-Control, сервер (Vapor + Fluent + SQLite,
+  схема БД, расписание 16:15 Europe/Berlin с повторами), iOS (протоколы `HTTPClient`/`RatesAPI`,
+  Decimal, офлайн-кэш с ETag), 5 потоков данных, Docker Compose, тесты, план работ
+- Все 7 mermaid-диаграмм проверил рендером mermaid 11 в браузере; схему компонентов
+  перестроил сверху вниз, чтобы она читалась на ширине GitHub
+- README: обновлены строки стека сервера и инфраструктуры
+
+**Файлы:** `docs/architecture.md`, `README.md`, `.agent/prompt-log.md`, `.agent/errors.md`, `.agent/config.json`
+
+**Коммиты:** Design client-server architecture in docs/architecture.md

@@ -1,65 +1,546 @@
 # Архитектура
 
-## Целевая схема
+Конвертер валют: iOS-приложение и собственный сервер на Swift.
+Приложение обращается **только к нашему серверу**. Внешний источник курсов знает только сервер:
+он по расписанию забирает курсы, хранит историю в SQLite и отдаёт её по REST.
 
-Приложение обращается только к собственному серверу. Сервер по расписанию забирает
-курсы у внешнего источника, хранит их в SQLite и отдаёт клиенту по REST.
+- [1. Компоненты](#1-компоненты)
+- [2. Где считать кросс-курсы](#2-где-считать-кросс-курсы)
+- [3. REST API](#3-rest-api)
+- [4. Кэширование: ETag и Cache-Control](#4-кэширование-etag-и-cache-control)
+- [5. Сервер](#5-сервер)
+- [6. iOS-клиент](#6-ios-клиент)
+- [7. Потоки данных](#7-потоки-данных)
+- [8. Развёртывание](#8-развёртывание)
+- [9. Тестирование](#9-тестирование)
+- [10. Текущее состояние и план](#10-текущее-состояние-и-план)
+
+---
+
+## 1. Компоненты
 
 ```mermaid
-flowchart LR
-    subgraph iOS["iOS-клиент (src/ios)"]
-        UI["components/<br/>ConverterView, CurrencyPickerView"]
-        VM["ConverterViewModel<br/>@MainActor @Observable"]
-        Repo["services/<br/>RatesRepository"]
-        Cache["RatesCache (actor)<br/>JSON на диске"]
-        UI --> VM --> Repo
+flowchart TB
+    subgraph IOS["iOS-клиент · src/ios"]
+        direction LR
+        Views["components/<br/>ConverterView · RateHistoryView<br/>CurrencyPickerView"]
+        VMs["@Observable @MainActor<br/>ConverterViewModel<br/>RateHistoryViewModel"]
+        Repo["services/RatesRepository"]
+        APIProto["RatesAPI<br/>(протокол)"]
+        APIImpl["ServerRatesAPI"]
+        HTTP["HTTPClient<br/>(протокол)<br/>URLSessionHTTPClient"]
+        Cache["RatesCache · actor<br/>последний ответ + ETag<br/>на диске"]
+        Calc["models/ExchangeRates<br/>кросс-курсы, Decimal"]
+
+        Views --> VMs
+        VMs --> Repo
+        VMs --> Calc
+        Repo --> APIProto
+        APIImpl -. реализует .-> APIProto
+        APIImpl --> HTTP
         Repo --> Cache
     end
 
-    subgraph Server["Сервер (src/server) — в разработке"]
-        API["REST API"]
-        Sync["Загрузка курсов<br/>по расписанию"]
-        DB[("SQLite")]
-        API --> DB
+    subgraph SRV["Сервер · src/server"]
+        direction LR
+        Routes["controllers/<br/>CurrenciesController<br/>RatesController<br/>TimeseriesController<br/>HealthController"]
+        MW["HTTPCachingMiddleware<br/>ETag · If-None-Match · Cache-Control"]
+        RatesSvc["services/RatesService<br/>выборка + кросс-курсы"]
+        Sync["services/RatesSyncService<br/>бэкфилл, догрузка пропусков"]
+        Sched["services/SyncScheduler<br/>будни, 16:15 Europe/Berlin<br/>+ повторы"]
+        Up["UpstreamRatesSource<br/>(протокол)<br/>FrankfurterSource"]
+        DB[("SQLite · WAL<br/>currencies · rates · sync_runs")]
+
+        MW --> Routes
+        Routes --> RatesSvc
+        RatesSvc --> DB
+        Sched --> Sync
+        Sync --> Up
         Sync --> DB
     end
 
-    Ext["Frankfurter API<br/>(курсы ЕЦБ)"]
+    ECB["Frankfurter API<br/>(курсы ЕЦБ)"]
 
-    Repo -- "HTTPS / JSON" --> API
-    Sync -- "HTTPS" --> Ext
+    HTTP -- "HTTPS · JSON<br/>GET /currencies, /rates, /timeseries" --> MW
+    Up -- "HTTPS · JSON" --> ECB
 ```
 
-Всё серверное поднимается через Docker Compose.
+| Компонент | Ответственность |
+|---|---|
+| **SyncScheduler** | Будит синхронизацию в рабочие дни после публикации курсов ЕЦБ, делает повторы, при старте догружает пропуски |
+| **RatesSyncService** | Забирает курсы у внешнего источника и идемпотентно записывает их в SQLite (upsert по `(date, currency)`) |
+| **UpstreamRatesSource** | Протокол внешнего источника; реализация `FrankfurterSource`. Можно заменить на прямой XML ЕЦБ без изменений остального кода |
+| **RatesService** | Читает курсы из БД, пересчитывает их к запрошенной базе (`Decimal`) |
+| **HTTPCachingMiddleware** | Ставит `ETag` и `Cache-Control`, отвечает `304 Not Modified` на `If-None-Match` |
+| **ServerRatesAPI** | Единственная точка выхода клиента в сеть; собирает запросы, обрабатывает `304`, превращает ошибки в типизированные |
+| **RatesRepository** | Совмещает API и кэш: отдаёт кэш сразу, решает, нужно ли идти в сеть, сохраняет новый ответ |
+| **RatesCache** | `actor`, хранит на диске последний ответ `/rates` и `/currencies` с `ETag` и сроком годности |
+| **ExchangeRates** | Конвертация любой пары по снимку курсов к EUR, только `Decimal` |
 
-## Текущее состояние
+---
 
-Сервера пока нет: `FrankfurterClient` в клиенте ходит во внешний API напрямую.
-Клиент зависит только от протокола `RatesProviding`, поэтому переход на свой сервер —
-это новая реализация протокола без изменений в UI и модели экрана.
+## 2. Где считать кросс-курсы
 
-## iOS-клиент
+ЕЦБ публикует курсы только к евро: `1 EUR = 1.0968 USD`, `1 EUR = 0.8329 GBP`.
+Курс любой другой пары — частное двух опубликованных чисел: `USD→GBP = 0.8329 / 1.0968`.
 
-| Слой | Папка | Что внутри |
+### Варианты
+
+| | Считать на клиенте от одной базы | Считать на сервере (`?base=`) |
 |---|---|---|
-| Точка входа | `CurrencyConverterApp.swift` | создаёт `ConverterViewModel` с боевым репозиторием |
-| UI | `components/` | `ConverterView` и его части (`CurrencyCard`, `ConversionRow`, `OfflineBanner`), `CurrencyPickerView` |
-| Модель экрана | `components/converter/ConverterViewModel.swift` | состояние ввода, производные значения, загрузка и обновление курсов |
-| Данные | `services/` | `RatesProviding` (протокол источника), `FrankfurterClient`, `RatesCache`, `RatesRepository` |
-| Модели | `models/` | `ExchangeRates` (кросс-курсы), `Currency` (название, флаг, поиск) |
-| Утилиты | `utils/` | `AmountParser` (ввод суммы с учётом локали) |
-| Стили | `styles/` | `Theme`: цвета, радиусы, шрифты |
+| Запросов на все пары | **1** (`/rates?base=EUR`) | 1 на каждую базу |
+| Офлайн | **любая из ~870 пар** по одному снимку (~1 КБ) | только пары от последней запрошенной базы |
+| Кэш и `ETag` | **один ресурс в день**: одна ревалидация, почти всегда `304` | ~30 вариантов, каждый ревалидируется отдельно |
+| Точность | **нет промежуточного округления**: делятся исходные числа ЕЦБ | сервер округляет кросс-курс, клиент умножает уже округлённое |
+| Смена валюты в UI | **мгновенно, без сети** | запрос на каждую смену базы |
+| Сложность клиента | формула деления в `ExchangeRates` (уже есть и покрыта тестами) | минимальная |
+| Другие клиенты API | — | получают готовый курс к любой базе |
 
-### Поток данных
+### Решение: гибрид — сервер умеет `base`, конвертер считает на клиенте
 
-1. `ConverterView` при появлении вызывает `model.load()`.
-2. Модель сразу показывает курсы из кэша (`RatesCache`), затем запрашивает свежие.
-3. Свежие курсы сохраняются в кэш; при ошибке сети остаются старые и показывается баннер.
-4. Курсы приходят одним снимком относительно EUR; любая пара считается локально как кросс-курс.
+1. **Сервер поддерживает `?base=` во всех эндпоинтах.** API самодостаточно: им можно пользоваться
+   без знания, что внутри всё хранится к евро. Кросс-курс считается в `Decimal` и округляется
+   до 6 значащих цифр (ЕЦБ публикует 5, так что точность не теряется).
+2. **Конвертер на iOS запрашивает `/rates?base=EUR` и считает пары сам.** Для денежных расчётов
+   это и точнее (одно деление исходных чисел, без округления посередине), и дешевле (один
+   кэшируемый ресурс), и работает офлайн для любой пары.
+3. **История курса (`/timeseries`) считается на сервере.** Клиент запрашивает
+   `base=USD&symbols=GBP` и получает один готовый ряд для графика: в 2 раза меньше данных, чем
+   два ряда к евро, а округление до 6 цифр на графике незаметно — деньги по истории не считаются.
 
-### Конкурентность
+Формула кросс-курса живёт в двух местах (сервер и клиент), поэтому обе реализации проверяются
+**одним набором тест-векторов** `tests/fixtures/cross-rates.json`, который читают тесты обеих сторон.
 
-Swift 6, `SWIFT_STRICT_CONCURRENCY = complete`:
-- UI-состояние изолировано на `@MainActor`
-- дисковый кэш — `actor`
-- модели и сервисы — `Sendable`-значения
+---
+
+## 3. REST API
+
+Базовый URL: `http://localhost:8080` (Docker Compose). Все ответы — JSON, даты — `YYYY-MM-DD`
+по календарю публикаций ЕЦБ. **Курсы передаются строками** (`"1.0968"`): так значение не проходит
+через `Double` ни в одном JSON-парсере и на клиенте сразу становится `Decimal`.
+
+### `GET /currencies`
+
+Список валют, для которых есть курсы.
+
+```json
+{ "currencies": [ { "code": "AUD", "name": "Australian Dollar" }, { "code": "EUR", "name": "Euro" } ] }
+```
+
+### `GET /rates?base=EUR&date=2026-11-18`
+
+| Параметр | Обязателен | По умолчанию | |
+|---|---|---|---|
+| `base` | нет | `EUR` | ISO 4217, должна быть в `/currencies` |
+| `date` | нет | последняя дата | если на дату нет публикации (выходной, праздник) — берётся ближайшая предыдущая, фактическая дата в поле `date` |
+
+```json
+{ "base": "EUR", "date": "2026-11-18", "rates": { "GBP": "0.8329", "JPY": "174.85", "USD": "1.0968" } }
+```
+
+### `GET /timeseries?base=USD&symbols=GBP,JPY&start=2026-08-18&end=2026-11-18`
+
+| Параметр | Обязателен | |
+|---|---|---|
+| `base` | нет, `EUR` | |
+| `symbols` | нет, все валюты | через запятую |
+| `start`, `end` | да | включительно; диапазон до 5 лет |
+
+В ответе только рабочие дни, в которые были публикации.
+
+```json
+{
+  "base": "USD", "start": "2026-08-18", "end": "2026-11-18",
+  "rates": {
+    "2026-08-18": { "GBP": "0.75812", "JPY": "158.21" },
+    "2026-08-19": { "GBP": "0.75790", "JPY": "158.64" }
+  }
+}
+```
+
+### `GET /health`
+
+Для healthcheck в Docker и для отладки.
+
+```json
+{ "status": "ok", "latestRateDate": "2026-11-18", "lastSyncAt": "2026-11-18T15:16:02Z", "lastSyncStatus": "success" }
+```
+
+### Ошибки
+
+```json
+{ "error": { "code": "unknown_currency", "message": "Currency 'XYZ' is not supported." } }
+```
+
+| Статус | `code` | Когда |
+|---|---|---|
+| 400 | `invalid_parameter` | неверный формат даты, `start > end`, диапазон больше 5 лет |
+| 400 | `unknown_currency` | `base` или `symbols` нет в `/currencies` |
+| 404 | `no_data` | нет курсов на запрошенный период (раньше начала истории) |
+| 503 | `not_ready` | сервер только запущен и ещё не загрузил первые курсы |
+
+---
+
+## 4. Кэширование: ETag и Cache-Control
+
+Цель — чтобы клиент не скачивал то, что у него уже есть. Курсы меняются раз в рабочий день,
+а прошлые курсы не меняются никогда.
+
+**ETag** — сильный, `"<первые 16 байт SHA-256 тела ответа в hex>"`. Считается в middleware
+по готовому телу, поэтому всегда корректен и не требует ручного версионирования.
+Если в запросе `If-None-Match` совпадает с ETag — ответ `304 Not Modified` без тела.
+
+**Cache-Control** по типу данных:
+
+| Ответ | `Cache-Control` | Почему |
+|---|---|---|
+| `/rates` без `date` (последние) | `public, max-age=3600` | новые курсы появляются раз в день; через час клиент ревалидирует по ETag и почти всегда получает `304` |
+| `/rates?date=` в прошлом | `public, max-age=31536000, immutable` | исторические курсы не меняются |
+| `/timeseries`, `end` раньше последней даты | `public, max-age=31536000, immutable` | то же |
+| `/timeseries`, включает последнюю дату | `public, max-age=3600` | последний день может дописаться |
+| `/currencies` | `public, max-age=86400` | список валют меняется крайне редко |
+| ошибки, `/health` | `no-store` | |
+
+**Клиент** не полагается на `URLCache` (его могут вытеснить, и тогда офлайн-режим пропадёт),
+а ведёт кэш сам в `RatesCache`: хранит тело, `ETag`, время загрузки и срок годности
+из `max-age`.
+
+- Срок не истёк → в сеть не ходим.
+- Срок истёк или pull-to-refresh → запрос с `If-None-Match`; `304` → продлеваем срок, тело не качаем.
+- Нет сети → показываем кэш и время последнего обновления.
+
+**Сервер к внешнему источнику** делает то же самое: Frankfurter отдаёт `ETag`, синхронизация
+шлёт `If-None-Match` и при `304` сразу понимает, что новых курсов нет.
+
+---
+
+## 5. Сервер
+
+**Стек:** Swift 6, [Vapor 4](https://vapor.codes), Fluent + FluentSQLiteDriver, Swift Testing / VaporTesting.
+Vapor — самый распространённый серверный фреймворк на Swift: миграции, роутинг, middleware и
+тестирование из коробки.
+
+### Структура
+
+```
+Package.swift                    манифест в корне (см. README)
+src/server/App/
+├── entrypoint.swift             точка входа, @main
+├── configure.swift              БД, миграции, middleware, маршруты, планировщик
+├── controllers/                 Currencies-, Rates-, Timeseries-, HealthController
+├── services/                    RatesService, RatesSyncService, SyncScheduler,
+│                                UpstreamRatesSource + FrankfurterSource
+├── models/                      Fluent-модели и DTO ответов
+├── migrations/                  создание таблиц и индексов
+└── utils/                       HTTPCachingMiddleware, Decimal ↔ String, разбор дат
+tests/server/                    тесты сервера
+tests/fixtures/cross-rates.json  общие тест-векторы для сервера и клиента
+```
+
+### Хранилище (SQLite)
+
+```mermaid
+erDiagram
+    currencies ||--o{ rates : "курсы по дням"
+    currencies {
+        TEXT code PK "ISO 4217"
+        TEXT name
+    }
+    rates {
+        TEXT date PK "YYYY-MM-DD, дата публикации ЕЦБ"
+        TEXT currency PK "FK currencies.code"
+        TEXT rate "единиц валюты за 1 EUR, десятичная строка"
+    }
+    sync_runs {
+        INTEGER id PK
+        TEXT started_at
+        TEXT finished_at
+        TEXT status "success / no_new_data / failed"
+        INTEGER dates_added
+        TEXT error
+    }
+```
+
+- Курсы хранятся **только к евро и ровно в том виде, в каком опубликованы**. В SQLite нет
+  десятичного типа (`REAL` — это `Double`), поэтому курс хранится как `TEXT` и читается в `Decimal`.
+- Индекс `(currency, date)` для выборок истории.
+- Режим WAL: чтение API не блокируется во время записи синхронизации.
+- `sync_runs` — журнал синхронизаций, его последняя запись видна в `/health`.
+
+### Расписание обновления
+
+ЕЦБ публикует курсы около 16:00 по центральноевропейскому времени в рабочие дни (кроме праздников TARGET).
+
+1. **При старте:** если БД пустая — бэкфилл за последние `BACKFILL_DAYS` дней (по умолчанию 365)
+   одним запросом к `/{start}..{end}` у Frankfurter (≈256 рабочих дней). Если не пустая — догрузка
+   с последней сохранённой даты по сегодня: покрывает время, пока сервер был выключен.
+2. **По будням в 16:15 Europe/Berlin** — запрос последних курсов. Время считается через
+   `Calendar` с часовым поясом `Europe/Berlin`, поэтому переход на летнее время учтён.
+3. **Повторы:** если последняя дата у источника ещё не сегодняшняя — повтор каждые 30 минут до 19:00.
+   Если курсов так и нет, значит праздник, и следующая попытка будет в следующий рабочий день.
+4. Запись идемпотентна (upsert по `(date, currency)`), в одной транзакции на синхронизацию.
+
+Планировщик — свой `SyncScheduler`: цикл в `Task` с `Task.sleep(until:)` до следующего запуска,
+запускается и останавливается вместе с приложением (`LifecycleHandler`). Часы (`Clock`) и источник
+курсов внедряются, поэтому расписание тестируется без ожидания реального времени.
+Vapor Queues не используется: для запланированных задач он требует отдельного хранилища очередей
+(Redis), а для одной задачи в день это лишний сервис в `docker-compose`.
+
+### Конфигурация (переменные окружения)
+
+| Переменная | По умолчанию | |
+|---|---|---|
+| `DATABASE_PATH` | `/data/rates.sqlite` | файл БД на volume |
+| `UPSTREAM_BASE_URL` | `https://api.frankfurter.dev/v1/` | внешний источник |
+| `BACKFILL_DAYS` | `365` | глубина истории при первом запуске |
+| `SYNC_TIME` | `16:15` | время первой попытки, Europe/Berlin |
+| `PORT` | `8080` | |
+
+---
+
+## 6. iOS-клиент
+
+**Стек:** Swift 6 со strict concurrency, SwiftUI, Observation, Swift Charts, iOS 17+, XcodeGen,
+Swift Testing. Без сторонних зависимостей.
+
+### Принципы
+
+- **Модели экранов — `@Observable` на `@MainActor`**: `ConverterViewModel` (ввод, выбор валют,
+  результат) и `RateHistoryViewModel` (пара, период 1Н / 1М / 3М / 1Г, точки графика).
+  Состояние загрузки — `enum LoadState { idle, loading, loaded, failed }`.
+- **Сетевой слой за протоколами** — два уровня, оба подменяются в тестах:
+  ```swift
+  protocol HTTPClient: Sendable {
+      func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
+  }
+
+  protocol RatesAPI: Sendable {
+      func currencies(ifNoneMatch etag: String?) async throws -> Conditional<[CurrencyDTO]>
+      func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<RatesDTO>
+      func timeseries(base: String, symbols: [String], start: Date, end: Date) async throws -> TimeseriesDTO
+  }
+
+  enum Conditional<Value: Sendable>: Sendable {
+      case modified(Value, etag: String?, maxAge: TimeInterval?)
+      case notModified(maxAge: TimeInterval?)
+  }
+  ```
+  `RatesAPI` мокается в тестах моделей экранов, `HTTPClient` — в тестах `ServerRatesAPI`
+  (сборка URL, заголовки, обработка `304` и ошибок).
+- **Деньги — только `Decimal`.** Сумма вводится через `AmountParser`, курсы приходят строками
+  и разбираются `Decimal(string:locale: en_US_POSIX)`, конвертация — `Decimal`, вывод —
+  `Decimal.FormatStyle.Currency`. `Double` встречается в одном месте: координаты точек на графике
+  Swift Charts, потому что Charts строит оси только по `Double`. Подписи на графике
+  форматируются из исходных `Decimal`.
+- **Офлайн-кэш последнего ответа** — `RatesCache` (`actor`, JSON в `Caches/`): последний `/rates?base=EUR`
+  и `/currencies` вместе с `ETag`, временем загрузки и сроком годности. История курса кэшируется
+  только в памяти: без сети экран истории показывает понятную ошибку, конвертер продолжает работать.
+- **Адрес сервера** — build setting `API_BASE_URL` → ключ в Info.plist. В Debug это
+  `http://localhost:8080` (симулятор видит сервер на Mac), для этого в Debug включён
+  `NSAllowsLocalNetworking`. Для запуска на телефоне — IP Mac в локальной сети.
+- **Названия валют** — локализованные из `Locale.localizedString(forCurrencyCode:)`,
+  английское название с сервера — запасной вариант.
+
+### Экраны
+
+| Экран | Модель | Данные |
+|---|---|---|
+| Конвертер | `ConverterViewModel` | `/rates?base=EUR` (кэш), расчёт на клиенте |
+| Выбор валюты | — (список + поиск) | `/currencies` (кэш) |
+| История курса | `RateHistoryViewModel` | `/timeseries?base=&symbols=` |
+
+---
+
+## 7. Потоки данных
+
+### 7.1 Ежедневное обновление курсов на сервере
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as SyncScheduler
+    participant Y as RatesSyncService
+    participant U as Frankfurter
+    participant D as SQLite
+
+    Note over S: будни, 16:15 Europe/Berlin
+    S->>Y: sync()
+    Y->>D: последняя сохранённая дата
+    Y->>U: GET /latest?base=EUR (If-None-Match)
+    alt 304 или дата уже есть в БД
+        U-->>Y: курсы не изменились
+        Y->>D: sync_runs: no_new_data
+        Y-->>S: нет новых курсов
+        S->>S: повтор через 30 мин (до 19:00)
+    else новые курсы
+        U-->>Y: 200, курсы за сегодня + ETag
+        Y->>D: BEGIN, upsert rates, sync_runs success, COMMIT
+        Y-->>S: готово
+        S->>S: сон до следующего рабочего дня
+    end
+```
+
+### 7.2 Первый запуск сервера
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as App (старт)
+    participant Y as RatesSyncService
+    participant U as Frankfurter
+    participant D as SQLite
+
+    A->>D: миграции
+    A->>Y: catchUp()
+    Y->>D: последняя дата?
+    alt БД пустая
+        Y->>U: GET /{сегодня − 365 дн.}..{сегодня}?base=EUR
+        U-->>Y: ≈256 рабочих дней × ~30 валют
+        Y->>U: GET /currencies
+        U-->>Y: названия валют
+    else есть данные до даты X
+        Y->>U: GET /{X+1}..{сегодня}?base=EUR
+        U-->>Y: пропущенные дни
+    end
+    Y->>D: upsert в одной транзакции
+    Note over A: до окончания загрузки API отвечает 503 not_ready
+```
+
+### 7.3 Запуск приложения и обновление курсов
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant V as ConverterView
+    participant M as ConverterViewModel
+    participant R as RatesRepository
+    participant C as RatesCache
+    participant A as ServerRatesAPI
+    participant S as Сервер
+
+    V->>M: .task → load()
+    M->>R: cached()
+    R->>C: load()
+    C-->>R: курсы + ETag + срок годности
+    R-->>M: показать сразу (если есть)
+    M->>R: refreshIfNeeded()
+    alt срок годности не истёк
+        R-->>M: ничего не делать
+    else истёк (или pull-to-refresh)
+        R->>A: latestRates(base: EUR, ifNoneMatch: etag)
+        A->>S: GET /rates?base=EUR, If-None-Match
+        alt курсы не менялись
+            S-->>A: 304 Not Modified
+            A-->>R: notModified(maxAge)
+            R->>C: продлить срок
+        else новые курсы
+            S-->>A: 200 + ETag + Cache-Control
+            A-->>R: modified(rates, etag, maxAge)
+            R->>C: save()
+            R-->>M: новые курсы
+        else нет сети / ошибка
+            A-->>R: throw
+            R-->>M: ошибка
+            M->>V: баннер «показаны курсы от …»
+        end
+    end
+```
+
+### 7.4 Конвертация (без сети)
+
+```mermaid
+sequenceDiagram
+    participant U as Пользователь
+    participant V as ConverterView
+    participant M as ConverterViewModel
+    participant E as ExchangeRates
+
+    U->>V: вводит «1 234,5», выбирает USD → GBP
+    V->>M: amountText, sourceCode, targetCode
+    M->>M: AmountParser → Decimal 1234.5
+    M->>E: convert(1234.5, from: USD, to: GBP)
+    E->>E: 1234.5 × rate(GBP) / rate(USD), Decimal
+    E-->>M: Decimal
+    M-->>V: форматирование по валюте GBP
+```
+
+### 7.5 История курса
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant V as RateHistoryView
+    participant M as RateHistoryViewModel
+    participant A as ServerRatesAPI
+    participant S as Сервер
+    participant D as SQLite
+
+    V->>M: пара USD → GBP, период 3М
+    M->>A: timeseries(base: USD, symbols: [GBP], start, end)
+    A->>S: GET /timeseries?base=USD&symbols=GBP&start=…&end=…
+    S->>D: курсы USD и GBP к EUR за период
+    S->>S: GBP / USD по дням, Decimal, 6 значащих цифр
+    S-->>A: 200, ряд + ETag + Cache-Control
+    A-->>M: TimeseriesDTO
+    M-->>V: точки графика + мин/макс/изменение за период
+```
+
+---
+
+## 8. Развёртывание
+
+Сервер запускается через Docker Compose из корня репозитория:
+
+```yaml
+services:
+  server:
+    build: .                     # Dockerfile в корне: сборка swift:6 → запуск в slim-образе
+    ports: ["8080:8080"]
+    environment:
+      DATABASE_PATH: /data/rates.sqlite
+      BACKFILL_DAYS: "365"
+    volumes:
+      - rates-data:/data         # БД переживает пересоздание контейнера
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+    restart: unless-stopped
+
+volumes:
+  rates-data:
+```
+
+Многоэтапный `Dockerfile`: в образе `swift:6.x` собирается release-бинарник, в итоговый
+`swift:6.x-slim` попадают только бинарник и нужные библиотеки.
+iOS-клиент собирается в Xcode, в Docker он не входит.
+
+---
+
+## 9. Тестирование
+
+| Где | Что | Как |
+|---|---|---|
+| `tests/server` | кросс-курсы и округление | общие векторы `tests/fixtures/cross-rates.json` |
+| | синхронизация: бэкфилл, догрузка, повторы, праздники | заглушка `UpstreamRatesSource`, SQLite в памяти |
+| | расписание: будни, 16:15 Berlin, переход на летнее время | внедрённые часы |
+| | эндпоинты: ответы, ошибки, `ETag` / `304`, `Cache-Control` | VaporTesting, SQLite в памяти |
+| `tests/ios` | кросс-курсы | те же общие векторы |
+| | `ServerRatesAPI`: URL, `If-None-Match`, `304`, ошибки, разбор строк в `Decimal` | мок `HTTPClient` |
+| | модели экранов: кэш → сеть, офлайн, срок годности, период истории | мок `RatesAPI` |
+| | разбор суммы | `AmountParser` (уже есть) |
+
+---
+
+## 10. Текущее состояние и план
+
+**Сейчас:** есть iOS-клиент; он временно ходит во Frankfurter напрямую через `FrankfurterClient`,
+кэширует последний ответ без `ETag`. Сервера ещё нет.
+
+**План:**
+
+1. Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.
+2. Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.
+3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`.
+4. Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.
+5. Клиент: экран истории курса на Swift Charts.
+6. Общие тест-векторы кросс-курсов, скриншоты и видео работающего приложения.

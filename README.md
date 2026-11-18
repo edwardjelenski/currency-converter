@@ -20,8 +20,8 @@
 | Часть | Технологии |
 |---|---|
 | iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
-| Сервер | Swift, REST API, SQLite — *в разработке* |
-| Инфраструктура | Docker Compose — *в разработке* |
+| Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST с ETag/Cache-Control, обновление курсов по расписанию — *в разработке* |
+| Инфраструктура | Docker Compose (сервер + volume с БД) — *в разработке* |
 
 Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
 у внешнего источника (Frankfurter / ЕЦБ) и хранит их в SQLite.

@@ -24,6 +24,13 @@
       "ccd_turn": {
         "update_plan": "task list shown in the desktop app",
         "wrap_up": "end-of-turn summary in the desktop app"
+      },
+      "Claude_Browser": {
+        "navigate": "open local pages in the built-in browser",
+        "browser_batch": "navigate + wait + read in one call",
+        "get_page_text": "read render results",
+        "javascript_tool": "inspect the page while checking diagrams",
+        "computer (screenshot, scroll)": "visual check of rendered mermaid diagrams"
       }
     },
     "cli": {
@@ -33,8 +40,8 @@
       "xcodebuild": "build and run tests",
       "xcrun simctl": "list and shut down simulators",
       "swift": "toolchain version, SwiftPM package layout check",
-      "curl": "inspect Frankfurter API responses",
-      "python3": "multi-line source edits during refactoring",
+      "curl": "inspect Frankfurter API responses and headers, local server health check",
+      "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
       "sips": "resize screenshots"
     }
   },
