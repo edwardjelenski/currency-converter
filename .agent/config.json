@@ -1,0 +1,23 @@
+{
+  "agent": "Claude Code",
+  "client": "Claude desktop app (Code tab)",
+  "model": "claude-opus-5-5",
+  "permission_mode": "auto",
+  "tools": {
+    "builtin": ["Bash", "Read", "Write", "Edit", "ToolSearch", "SendUserFile"],
+    "mcp": {
+      "xcode": ["XcodeOpenWorkspace", "XcodeCloseWorkspace", "RenderPreview"]
+    },
+    "cli": ["git", "gh", "xcodegen", "xcodebuild", "xcrun simctl", "swift", "curl"]
+  },
+  "user_instructions": [
+    "Personal projects: commit straight to main and push, no PRs or feature branches",
+    "SwiftUI UI checks: render #Preview via Xcode MCP instead of running the app",
+    "iOS simulators: reuse an existing free simulator, never create new ones, shut down after use"
+  ],
+  "environment": {
+    "xcode": "27.0",
+    "swift": "6.4",
+    "xcodegen": "2.46.0"
+  }
+}

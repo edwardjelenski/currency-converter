@@ -1,52 +1,101 @@
 # Currency Converter
 
-iOS currency converter built with SwiftUI.
+Мобильное приложение-конвертер валют (iOS) с собственной серверной частью.
+Учебный проект: разработка с ИИ-агентом, ход работы задокументирован в
+[PROMPTS.md](PROMPTS.md), [REFLECTION.md](REFLECTION.md) и [.agent/](.agent).
 
-- iOS 17+
-- Swift 6 language mode with complete strict concurrency checking
-- Project generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-- No third-party dependencies
+**Тип проекта:** мобильное приложение с серверной частью (клиент-сервер, REST API).
 
-## Features
+## Возможности
 
-- Convert between ~30 currencies using European Central Bank reference rates
-- Swap currencies, search the currency list by name or ISO code
-- See the amount converted into every other currency at once; tap one to make it the target
-- Works offline with the last downloaded rates; pull to refresh
-- Remembers the last amount and currency pair
-- Locale-aware amount input (`1 234,5`, `1,234.5`, `1.234,5`)
+- Конвертация между ~30 валютами по референсным курсам ЕЦБ
+- Смена валют местами, поиск валюты по названию или ISO-коду
+- Сумма сразу во всех остальных валютах; тап по строке делает валюту целевой
+- Работа офлайн с последними загруженными курсами, pull-to-refresh
+- Запоминание последней суммы и пары валют
+- Ввод суммы с учётом локали: `1 234,5`, `1,234.5`, `1.234,5`
 
-## Getting started
+## Стек
+
+| Часть | Технологии |
+|---|---|
+| iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
+| Сервер | Swift, REST API, SQLite — *в разработке* |
+| Инфраструктура | Docker Compose — *в разработке* |
+
+Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
+у внешнего источника (Frankfurter / ЕЦБ) и хранит их в SQLite.
+Сейчас, до появления сервера, клиент временно ходит во Frankfurter напрямую.
+Подробнее — [docs/architecture.md](docs/architecture.md).
+
+## Структура
+
+```
+.
+├── README.md, PROMPTS.md, REFLECTION.md
+├── src/
+│   ├── ios/                     iOS-клиент
+│   │   ├── project.yml          спецификация XcodeGen (.xcodeproj не коммитится)
+│   │   └── CurrencyConverter/
+│   │       ├── CurrencyConverterApp.swift   точка входа
+│   │       ├── components/      SwiftUI-экраны и view
+│   │       ├── services/        работа с API и кэшем
+│   │       ├── models/          модели данных
+│   │       ├── utils/           вспомогательные функции
+│   │       ├── styles/          цвета, шрифты, размеры (Theme)
+│   │       ├── resources/       Assets.xcassets
+│   │       └── preview/         тестовые данные для #Preview (только Debug)
+│   └── server/                  сервер — в разработке
+├── tests/
+│   ├── ios/                     unit-тесты клиента (Swift Testing)
+│   └── server/                  тесты сервера — в разработке
+├── docs/
+│   ├── architecture.md          схема компонентов
+│   └── screenshots/             скриншоты
+└── .agent/                      артефакты работы с ИИ-агентом
+    ├── prompt-log.md            хронология запросов
+    ├── errors.md                ошибки агента и их исправление
+    └── config.json              настройки агента
+```
+
+**Про `package.json` / `requirements.txt`.** В Swift их роль играет манифест
+SwiftPM `Package.swift`. Для сервера он будет лежать **в корне репозитория**:
+SwiftPM не разрешает пакету ссылаться на исходники вне своей папки, а тесты по
+шаблону лежат в `tests/server`, поэтому корень — единственное место, откуда
+видны и `src/server`, и `tests/server`. У iOS-клиента сторонних зависимостей нет,
+его настройки сборки описаны в `src/ios/project.yml`. Отдельный `requirements.txt`
+(формат Python) в проекте не нужен.
+
+## Запуск
+
+### iOS-клиент
+
+Нужны Xcode 16+ и XcodeGen.
 
 ```bash
 brew install xcodegen
+cd src/ios
 xcodegen generate
 open CurrencyConverter.xcodeproj
 ```
 
-The `.xcodeproj` is not committed — regenerate it after pulling changes to `project.yml`
-or adding/removing files.
+`.xcodeproj` генерируется из `project.yml` — перегенерируйте его после `git pull` и
+после добавления или удаления файлов.
 
-Run the tests from Xcode (⌘U) or:
+Тесты — в Xcode (⌘U) или из `src/ios`:
 
 ```bash
-xcodebuild test -project CurrencyConverter.xcodeproj -scheme CurrencyConverter \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild test -project CurrencyConverter.xcodeproj -scheme CurrencyConverter -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-## Architecture
+### Сервер
 
-```
-CurrencyConverter/
-├── App/                  App entry point
-├── Models/               ExchangeRates (cross-rate math), Currency, AmountParser
-├── Services/             FrankfurterClient, RatesCache (actor), RatesRepository
-├── Features/
-│   ├── Converter/        ConverterView + @MainActor @Observable ConverterViewModel
-│   └── CurrencyPicker/   Searchable currency sheet
-└── Preview/              Debug-only sample data for #Preview
-```
+*В разработке:* запуск через `docker compose up` будет описан здесь.
 
-Rates come from the free [Frankfurter API](https://frankfurter.dev) (no API key).
-The app fetches one EUR-based snapshot and computes every pair locally as a cross rate,
-so a single request covers all conversions. ECB publishes new rates once per working day.
+## Скриншоты
+
+| Светлая тема | Тёмная тема |
+|---|---|
+| ![](docs/screenshots/converter-light.png) | ![](docs/screenshots/converter-dark.png) |
+
+Видео-демонстрация (`docs/demo.mp4`) будет добавлена после подключения сервера.
