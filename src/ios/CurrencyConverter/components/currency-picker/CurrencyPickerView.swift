@@ -11,6 +11,7 @@ struct CurrencyPickerView: View {
     let onSelect: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var query = ""
     /// Checkmarks are local state: a closure reading the model from inside `List` rows
     /// isn't observed, so toggled rows wouldn't redraw.
@@ -91,14 +92,25 @@ struct CurrencyPickerView: View {
             if !allowsMultipleSelection { dismiss() }
         } label: {
             HStack(spacing: 12) {
-                Text(currency.flag).font(.title2)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(currency.name())
-                    Text(currency.code)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Flag next to the code, so the name gets the full width and doesn't
+                    // break mid-word.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(currency.name())
+                        Text(verbatim: "\(currency.flag) \(currency.code)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(currency.flag).font(.title2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(currency.name())
+                        Text(currency.code)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 if allowsMultipleSelection {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .font(.title3)

@@ -91,12 +91,15 @@ extension ConverterViewModel {
     static func preview(
         api: any RatesAPI = PreviewRatesAPI(),
         snapshot: CachedRates? = .sample(),
-        favorites: [String]? = nil
+        favorites: [String]? = nil,
+        amount: String? = nil,
+        target: String? = nil
     ) -> ConverterViewModel {
         let suite = "preview.\(UUID().uuidString)"
-        if let favorites {
-            PreferencesStore(defaults: UserDefaults(suiteName: suite)!).favorites = favorites
-        }
+        let preferences = PreferencesStore(defaults: UserDefaults(suiteName: suite)!)
+        if let favorites { preferences.favorites = favorites }
+        if let amount { preferences.amountText = amount }
+        if let target { preferences.targetCode = target }
         return ConverterViewModel(
             repository: RatesRepository(
                 api: api,

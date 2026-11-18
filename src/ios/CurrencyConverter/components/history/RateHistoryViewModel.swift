@@ -116,13 +116,19 @@ final class RateHistoryViewModel {
         if history.isChartable {
             content = .chart(history)
         } else {
-            content = .empty("Not enough data to draw \(title) for \(period.accessibilityName). The ECB publishes rates on working days only.")
+            content = .empty(String(
+                localized: "Not enough data to draw \(title) for \(period.displayName). The ECB publishes rates on working days only.",
+                comment: "History empty state: fewer than two days of rates. First argument is a pair like 'USD → EUR', second a period like '1 week'"
+            ))
         }
     }
 
     private func handle(_ error: any Error) {
         if case let .server(_, code, _) = error as? RatesAPIError, code == "no_data" {
-            content = .empty("There are no \(title) rates for \(period.accessibilityName). The currency may not have been published by the ECB in this period.")
+            content = .empty(String(
+                localized: "There are no \(title) rates for \(period.displayName). The currency may not have been published by the ECB in this period.",
+                comment: "History empty state: no rates at all. First argument is a pair like 'USD → EUR', second a period like '1 month'"
+            ))
             shownKey = nil
             return
         }
@@ -139,13 +145,13 @@ final class RateHistoryViewModel {
     static func failure(for error: any Error) -> Failure {
         if let urlError = error as? URLError, Self.offlineCodes.contains(urlError.code) {
             return Failure(
-                title: "No connection",
-                message: "Can't reach the rates server. Check your connection and try again.",
+                title: String(localized: "No connection"),
+                message: String(localized: "Can't reach the rates server. Check your connection and try again."),
                 isOffline: true
             )
         }
         return Failure(
-            title: "Couldn't load history",
+            title: String(localized: "Couldn't load history"),
             message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
             isOffline: false
         )

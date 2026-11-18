@@ -6,14 +6,16 @@ struct RateHistoryView: View {
     /// Preselected chart point (previews only).
     var previewSelection: Date?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 Picker("Period", selection: $model.period) {
                     ForEach(HistoryPeriod.allCases) { period in
-                        Text(period.rawValue)
-                            .accessibilityLabel(period.accessibilityName)
+                        Text(period.label)
+                            .accessibilityLabel(period.displayName)
                             .tag(period)
                     }
                 }
@@ -46,6 +48,7 @@ struct RateHistoryView: View {
                 }
             }
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: model.base)
         .refreshable { await model.load() }
         .task(id: model.requestID) { await model.load() }
     }
@@ -59,24 +62,28 @@ struct RateHistoryView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if let last = model.history?.last {
-                Text("\(model.format(rate: last.rate)) \(model.target)")
+                Text(verbatim: "\(model.format(rate: last.rate)) \(model.target)")
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold).monospacedDigit())
                     .contentTransition(.numericText())
-                HStack(spacing: 6) {
+                // Change and "over 1 month · date" side by side, or stacked at accessibility sizes.
+                let changeLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                    : AnyLayout(HStackLayout(spacing: 6))
+                changeLayout {
                     if let ratio = model.history?.changeRatio {
                         Text(model.format(change: ratio))
                             .foregroundStyle(ChangeTint(ratio).color)
                             .fontWeight(.semibold)
                     }
-                    Text("over \(model.period.accessibilityName) · \(last.date.formatted(date: .abbreviated, time: .omitted))")
+                    Text("over \(model.period.displayName) · \(last.date.formatted(date: .abbreviated, time: .omitted))")
                         .foregroundStyle(.secondary)
                 }
                 .font(.subheadline.monospacedDigit())
             } else {
-                Text("— \(model.target)")
+                Text(verbatim: "— \(model.target)")
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .foregroundStyle(.secondary)
-                Text(" ")
+                Text(verbatim: " ")
                     .font(.subheadline)
             }
         }
@@ -96,6 +103,9 @@ struct RateHistoryView: View {
         case let .chart(history):
             RateHistoryChart(history: history, period: model.period, formatRate: model.format(rate:), selectedDate: previewSelection)
                 .id(model.requestID)
+                // Axis labels at accessibility sizes would leave no room for the line;
+                // the exact values are in the header, the tiles and the selection bubble.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
         case let .empty(message):
             ContentUnavailableView {

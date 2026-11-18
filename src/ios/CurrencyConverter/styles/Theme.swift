@@ -16,5 +16,7 @@ enum Theme {
     static let cardCornerRadius: CGFloat = 20
     static let listCornerRadius: CGFloat = 16
 
-    static let amountFont = Font.system(.title, design: .rounded, weight: .semibold)
+    /// The amount you send and the result: large, and with monospaced digits so the
+    /// number doesn't jiggle sideways while typing or when the rate updates.
+    static let amountFont = Font.system(.largeTitle, design: .rounded, weight: .semibold).monospacedDigit()
 }

@@ -6,12 +6,22 @@ struct CurrencyCard<Value: View>: View {
     let pick: () -> Void
     @ViewBuilder let value: () -> Value
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Side by side normally; at accessibility text sizes the amount gets its own line,
+    /// otherwise a large number and the currency chip don't fit next to each other.
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
+            layout {
                 Button(action: pick) {
                     HStack(spacing: 8) {
                         Text(currency.flag).font(.title2)
@@ -25,7 +35,7 @@ struct CurrencyCard<Value: View>: View {
                     .background(Theme.chip, in: .capsule)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(currency.name()), change currency")
+                .accessibilityLabel(Text("\(currency.name()), change currency"))
 
                 value()
             }

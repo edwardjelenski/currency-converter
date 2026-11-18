@@ -11,7 +11,10 @@ struct ConverterView: View {
     @State private var picking: PickerTarget?
     @State private var path: [HistoryRoute] = []
     @State private var editMode: EditMode = .inactive
+    /// Bumped on every swap; drives the haptic.
+    @State private var swapCount = 0
     @FocusState private var amountFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private enum PickerTarget: String, Identifiable {
         case source, target, favorites
@@ -70,7 +73,9 @@ struct ConverterView: View {
     }
 
     private var converterCards: some View {
-        VStack(spacing: 8) {
+        // The swap button sits between the cards and overlaps both; laid out in the stack
+        // (not as an overlay) so it stays between them when the cards grow with Dynamic Type.
+        VStack(spacing: -18) {
             CurrencyCard(title: "You send", currency: model.source) {
                 picking = .source
             } value: {
@@ -82,35 +87,56 @@ struct ConverterView: View {
                     .accessibilityLabel("Amount in \(model.source.code)")
             }
 
+            swapButton
+                .zIndex(1)
+
             CurrencyCard(title: "They get", currency: model.target) {
                 picking = .target
             } value: {
-                Text(model.formattedResult)
-                    .font(Theme.amountFont)
-                    .foregroundStyle(.tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .contentTransition(.numericText())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                // Full size whenever it fits; shrink only a really long number. A plain
+                // lineLimit(1) + minimumScaleFactor shrinks needlessly inside a List row
+                // (the row is measured with a narrower width first).
+                ViewThatFits(in: .horizontal) {
+                    resultText
+                        .fixedSize(horizontal: true, vertical: false)
+                    resultText
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-        }
-        .overlay {
-            Button {
-                withAnimation(.snappy) { model.swapCurrencies() }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.headline)
-                    .frame(width: 44, height: 44)
-                    .background(.tint, in: .circle)
-                    .foregroundStyle(.white)
-                    .overlay(Circle().stroke(Theme.background, lineWidth: 4))
-            }
-            // In a List row a default-styled button makes the whole row its tap area.
-            .buttonStyle(.plain)
-            .accessibilityLabel("Swap currencies")
         }
         .animation(.snappy, value: model.formattedResult)
+    }
+
+    private var resultText: some View {
+        Text(model.formattedResult)
+            .font(Theme.amountFont)
+            .foregroundStyle(.tint)
+            .contentTransition(.numericText())
+            .textSelection(.enabled)
+    }
+
+    private var swapButton: some View {
+        Button {
+            swapCount += 1
+            withAnimation(.snappy) { model.swapCurrencies() }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.headline)
+                // The circle has a fixed size, so the glyph can't follow huge text sizes;
+                // VoiceOver users get the label, everyone else the Large Content Viewer.
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                .frame(width: 44, height: 44)
+                .background(.tint, in: .circle)
+                .foregroundStyle(.white)
+                .overlay(Circle().stroke(Theme.background, lineWidth: 4))
+        }
+        // In a List row a default-styled button makes the whole row its tap area.
+        .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .medium), trigger: swapCount)
+        .accessibilityLabel("Swap currencies")
+        .accessibilityShowsLargeContentViewer()
     }
 
     /// The pair's rate; tapping it opens the rate history. This is where people look at
@@ -124,6 +150,8 @@ struct ConverterView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "chart.xyaxis.line")
                         .font(.body.weight(.semibold))
+                        // Fixed circle: keep the glyph inside it at huge text sizes.
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                         .foregroundStyle(.tint)
                         .frame(width: 36, height: 36)
                         .background(.tint.opacity(0.12), in: .circle)
@@ -137,9 +165,12 @@ struct ConverterView: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    Text("History")
-                        .font(.subheadline)
-                        .foregroundStyle(.tint)
+                    // At accessibility sizes the rate needs the room; the chevron still says "opens".
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("History")
+                            .font(.subheadline)
+                            .foregroundStyle(.tint)
+                    }
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -164,7 +195,7 @@ struct ConverterView: View {
                 } label: {
                     ConversionRow(
                         currency: favorite.currency,
-                        amount: favorite.amount.map { model.format($0, currency: favorite.currency.code) } ?? "No rate"
+                        amount: favorite.amount.map { model.format($0, currency: favorite.currency.code) } ?? String(localized: "No rate")
                     )
                 }
                 .buttonStyle(.plain)
@@ -204,26 +235,38 @@ struct ConverterView: View {
                 .listRowBackground(Theme.surface)
             }
         } header: {
+            favoritesHeader
+        }
+    }
+
+    /// Title with Edit and +; at accessibility sizes the title gets its own line,
+    /// otherwise "Favorites" and "Edit" break mid-word (especially in Russian).
+    private var favoritesHeader: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout())
+        return layout {
+            Text("Favorites")
+                .font(.headline)
+                .foregroundStyle(.primary)
             HStack {
-                Text("Favorites")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                 if !model.favorites.isEmpty {
                     Button(editMode.isEditing ? "Done" : "Edit") {
                         withAnimation { editMode = editMode.isEditing ? .inactive : .active }
                     }
                     .font(.subheadline)
                 }
+                if dynamicTypeSize.isAccessibilitySize { Spacer() }
                 Button("Add to Favorites", systemImage: "plus.circle.fill") {
                     picking = .favorites
                 }
                 .labelStyle(.iconOnly)
                 .font(.title3)
             }
-            .textCase(nil)
-            .padding(.horizontal, -4)
         }
+        .textCase(nil)
+        .padding(.horizontal, -4)
     }
 
     // MARK: Picker
@@ -265,7 +308,11 @@ struct ConverterView: View {
         ContentUnavailableView {
             Label("No rates yet", systemImage: "wifi.exclamationmark")
         } description: {
-            Text(model.errorMessage ?? "Exchange rates couldn't be loaded.")
+            if let errorMessage = model.errorMessage {
+                Text(errorMessage)
+            } else {
+                Text("Exchange rates couldn't be loaded.")
+            }
         } actions: {
             Button("Try Again") { Task { await model.refresh() } }
                 .buttonStyle(.borderedProminent)
@@ -285,6 +332,14 @@ private extension View {
 #if DEBUG
 #Preview("Converter") {
     ConverterView(model: .preview(), history: .preview())
+}
+
+#Preview("Long result") {
+    ConverterView(model: .preview(amount: "250", target: "GBP"), history: .preview())
+}
+
+#Preview("Huge result") {
+    ConverterView(model: .preview(amount: "2500000", target: "IDR"), history: .preview())
 }
 
 #Preview("No favorites") {

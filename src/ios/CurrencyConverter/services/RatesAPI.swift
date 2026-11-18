@@ -31,9 +31,9 @@ enum RatesAPIError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .server(_, _, message): message
-        case let .unexpectedStatus(status): "The server responded with status \(status)."
-        case .unexpectedNotModified: "The server responded 304 to an unconditional request."
-        case let .invalidRate(currency, value): "The server sent an invalid \(currency) rate '\(value)'."
+        case let .unexpectedStatus(status): String(localized: "The server responded with status \(status).")
+        case .unexpectedNotModified: String(localized: "The server responded 304 to an unconditional request.")
+        case let .invalidRate(currency, value): String(localized: "The server sent an invalid \(currency) rate “\(value)”.")
         }
     }
 }

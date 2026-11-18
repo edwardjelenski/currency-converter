@@ -5,8 +5,14 @@ struct HistoryStatsView: View {
     let history: RateHistory
     let model: RateHistoryViewModel
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: 12) {
+        // Three tiles in a row normally, one per line at accessibility text sizes.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             if let low = history.minPoint {
                 tile(title: "Low", value: model.format(rate: low.rate), detail: low.date.formatted(.dateTime.day().month(.abbreviated)))
             }

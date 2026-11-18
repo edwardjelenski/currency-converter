@@ -8,6 +8,10 @@ struct RateHistoryChart: View {
     let formatRate: (Decimal) -> String
 
     @State private var selectedDate: Date?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Big text (or long month names, e.g. Russian "нояб.") needs fewer, wider-spaced labels.
+    private var isLargeText: Bool { dynamicTypeSize >= .xxLarge }
 
     init(history: RateHistory, period: HistoryPeriod, formatRate: @escaping (Decimal) -> String, selectedDate: Date? = nil) {
         self.history = history
@@ -65,10 +69,10 @@ struct RateHistoryChart: View {
         .chartXSelection(value: $selectedDate)
         .chartYScale(domain: yDomain)
         // Room at both ends so the first and last x-axis labels stay inside the chart.
-        .chartXScale(range: .plotDimension(padding: 20))
+        .chartXScale(range: .plotDimension(padding: isLargeText ? 32 : 20))
         .chartXAxis {
             // .aligned keeps the first and last labels inside the plot instead of truncating them.
-            AxisMarks(preset: .aligned, values: .automatic(desiredCount: period == .week ? 5 : 4)) { _ in
+            AxisMarks(preset: .aligned, values: .automatic(desiredCount: isLargeText ? 3 : (period == .week ? 5 : 4))) { _ in
                 AxisGridLine()
                 AxisValueLabel(format: xAxisFormat)
             }

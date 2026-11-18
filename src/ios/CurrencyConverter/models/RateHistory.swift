@@ -20,12 +20,23 @@ enum HistoryPeriod: String, CaseIterable, Identifiable, Hashable, Sendable {
         return calendar.date(byAdding: component.0, value: component.1, to: end)!
     }
 
-    var accessibilityName: String {
+    /// Short label for the period picker.
+    var label: LocalizedStringResource {
         switch self {
-        case .week: "1 week"
-        case .month: "1 month"
-        case .quarter: "3 months"
-        case .year: "1 year"
+        case .week: LocalizedStringResource("1W", comment: "Period picker: one week")
+        case .month: LocalizedStringResource("1M", comment: "Period picker: one month")
+        case .quarter: LocalizedStringResource("3M", comment: "Period picker: three months")
+        case .year: LocalizedStringResource("1Y", comment: "Period picker: one year")
+        }
+    }
+
+    /// Full name, as in "over 1 month" and for VoiceOver.
+    var displayName: String {
+        switch self {
+        case .week: String(localized: "1 week", comment: "History period, used in 'over 1 week'")
+        case .month: String(localized: "1 month", comment: "History period, used in 'over 1 month'")
+        case .quarter: String(localized: "3 months", comment: "History period, used in 'over 3 months'")
+        case .year: String(localized: "1 year", comment: "History period, used in 'over 1 year'")
         }
     }
 }
