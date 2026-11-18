@@ -298,3 +298,37 @@ multistage Dockerfile + docker-compose.yml. проверь что docker compose
 **Коммиты:** `6f58d7b` Log every request with its final status on the server ·
 `daee635` Switch the iOS app to our server; remove the direct Frankfurter client ·
 `876fef4` Test the server API client, ETag cache and refresh policy · Document the server-backed iOS client
+
+---
+
+## 9. 2026-11-18 21:20
+
+**Запрос:**
+
+```text
+экран истории курса на swift charts. периоды 1Н/1М/3М/1Г, selection драгом со значением на дату, мин/макс и изменение в % за период. как открывать с главного экрана - предложи сам. пустое состояние и ошибку без сети тоже продумай
+```
+
+**Что сделано:**
+- Вход: карточка курса пары на главном экране («1 USD = 0.9117 EUR · History ›», push-навигация) и
+  контекстное меню любой валюты в «Other currencies» → «Rate history»
+- Экран: курс и изменение за период в шапке, переключатель 1W/1M/3M/1Y (подписи на английском, как весь
+  интерфейс), Swift Charts (линия + заливка), выделение драгом (`chartXSelection`: линия, точка, подсказка
+  со значением на день, хаптик), плитки Low/High/Change в `Decimal`, смена пары местами
+- Состояния: загрузка, пусто (`no_data` или один день), нет сети без данных («No connection» + «Try Again»),
+  нет сети с данными в памяти (график + плашка), ошибка сервера с его текстом
+- Данные: `RatesAPI.history` → `GET /timeseries` для одной пары; `RateHistoryRepository` хранит результаты
+  в памяти на сессию
+- Превью (месяц, год с выделением, пусто, офлайн, загрузка) отрендерены через Xcode MCP; 59 iOS-тестов
+- Симулятор с сервером: вход с карточки (`/timeseries … → 200`), 1M/1Y/1W на реальных данных,
+  без сети — «No connection» для 3M и график из памяти с плашкой для 1M, вход из контекстного меню (USD→AUD)
+- По итогам проверки: подписи оси X больше не обрезаются, на недельном графике отмечены дни публикации,
+  повторная загрузка того же периода не мигает индикатором
+- README (возможности, скриншоты), architecture (экран истории, таблица состояний, поток 7.5, план)
+
+**Файлы:** `src/ios/CurrencyConverter/{models/RateHistory.swift, services/RatesAPI.swift, services/ServerRatesAPI.swift,
+services/RateHistoryRepository.swift, services/RatesRepository.swift, components/history/*, components/converter/ConverterView.swift,
+CurrencyConverterApp.swift, preview/PreviewData.swift}`, `tests/ios/*`, `docs/**`, `README.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `46b85f3` Add rate history screen with Swift Charts · `13040e7` Test rate history model, API and screen states ·
+Document the rate history screen

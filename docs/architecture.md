@@ -365,7 +365,7 @@ Swift Testing. Без сторонних зависимостей.
 
   protocol RatesAPI: Sendable {
       func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates>
-      // шаг 5: func timeseries(base:symbols:start:end:) для экрана истории
+      func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory
   }
 
   enum Conditional<Value: Sendable>: Sendable {
@@ -408,7 +408,31 @@ Swift Testing. Без сторонних зависимостей.
 |---|---|---|
 | Конвертер | `ConverterViewModel` | `/rates?base=EUR` (кэш), расчёт на клиенте |
 | Выбор валюты | — (список + поиск) | коды из снимка `/rates`, названия из `Locale` |
-| История курса | `RateHistoryViewModel` | `/timeseries?base=&symbols=` |
+| История курса | `RateHistoryViewModel` | `/timeseries?base=&symbols=` для одной пары, кэш в памяти на сессию |
+
+### Экран истории курса
+
+**Как открыть.** Главный путь — карточка курса пары на главном экране (`1 USD = 0.9117 EUR · History ›`):
+это ровно то число, историю которого хочется увидеть, поэтому вход там, где пользователь уже смотрит.
+Второй — долгое нажатие на любую валюту в «Other currencies» → «Rate history» (история
+от исходной валюты к выбранной). Экран открывается push-навигацией, внутри можно поменять пару местами.
+
+**Что на экране:** текущий курс и изменение за период, переключатель 1W / 1M / 3M / 1Y,
+график (линия + заливка) с выделением по драгу — вертикальная линия, точка и подсказка
+со значением на ближайший день публикации, — плитки «Low / High / Change». Все расчёты в `Decimal`;
+`Double` — только координаты для Swift Charts. На недельном графике отмечены точки дней публикации,
+чтобы плавная линия через выходные не выглядела как данные.
+
+**Состояния:**
+
+| Состояние | Когда | Что видно |
+|---|---|---|
+| Загрузка | первый запрос периода | индикатор на месте графика (повторная загрузка того же периода график не скрывает) |
+| График | ≥ 2 дней с курсом | график, выделение, статистика |
+| Пусто | сервер ответил `no_data` или день всего один | «No data for this period» и причина (например, валюту перестали публиковать) |
+| Нет сети, данных нет | сетевая ошибка, период ещё не загружался | «No connection» + «Try Again» |
+| Нет сети, данные в памяти | сетевая ошибка, период уже загружался в этой сессии | график из памяти и плашка «Couldn't update rates» |
+| Ошибка сервера | любой другой ответ, например `503 not_ready` | текст ошибки с сервера + «Try Again» |
 
 ---
 
@@ -540,18 +564,35 @@ sequenceDiagram
     autonumber
     participant V as RateHistoryView
     participant M as RateHistoryViewModel
+    participant R as RateHistoryRepository
     participant A as ServerRatesAPI
     participant S as Сервер
-    participant D as SQLite
 
-    V->>M: пара USD → GBP, период 3М
-    M->>A: timeseries(base: USD, symbols: [GBP], start, end)
+    V->>M: .task(id: пара + период) → load()
+    M->>R: cached(USD→GBP, 3М, сегодня)
+    alt есть в памяти
+        R-->>M: история
+        M-->>V: график сразу
+    else нет
+        M-->>V: индикатор загрузки
+    end
+    M->>R: load()
+    R->>A: history(base: USD, target: GBP, start, end)
     A->>S: GET /timeseries?base=USD&symbols=GBP&start=…&end=…
-    S->>D: курсы USD и GBP к EUR за период
-    S->>S: GBP / USD по дням, Decimal, 6 значащих цифр
-    S-->>A: 200, ряд + ETag + Cache-Control
-    A-->>M: TimeseriesDTO
-    M-->>V: точки графика + мин/макс/изменение за период
+    alt 200
+        S-->>A: ряд по дням (строки → Decimal)
+        A-->>R: RateHistory
+        R->>R: запомнить в памяти
+        M-->>V: график, мин/макс/изменение
+    else 404 no_data
+        M-->>V: пустое состояние
+    else нет сети
+        alt график уже на экране
+            M-->>V: оставить график + плашка «Couldn't update»
+        else
+            M-->>V: «No connection» + «Try Again»
+        end
+    end
 ```
 
 ---
@@ -624,6 +665,8 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 - iOS-клиент (шаг 4) ходит только на наш сервер: `ServerRatesAPI`, кэш с `ETag` и сроком годности,
   41 тест; проверено в симуляторе — холодный старт (`200`), запуск при выключенном сервере
   (курсы из кэша без запроса, при обновлении — плашка), обновление после включения (`304`).
+- Экран истории курса (шаг 5): Swift Charts, 4 периода, выделение драгом, мин/макс/изменение, пустое
+  и офлайн-состояния; 59 iOS-тестов; проверено в симуляторе на реальных данных сервера.
 
 **План:**
 
@@ -631,5 +674,5 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 2. ~~Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.~~ Готово.
 3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`. Файлы готовы, проверка ждёт Docker (`scripts/verify-docker.sh`).
 4. ~~Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.~~ Готово.
-5. Клиент: экран истории курса на Swift Charts.
+5. ~~Клиент: экран истории курса на Swift Charts.~~ Готово.
 6. Общие тест-векторы кросс-курсов, скриншоты и видео работающего приложения.

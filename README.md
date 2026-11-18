@@ -14,6 +14,9 @@
 - Работа офлайн с последними загруженными курсами, pull-to-refresh
 - Запоминание последней суммы и пары валют
 - Ввод суммы с учётом локали: `1 234,5`, `1,234.5`, `1.234,5`
+- История курса пары на Swift Charts: периоды 1W / 1M / 3M / 1Y, значение на дату по драгу,
+  минимум, максимум и изменение за период; открывается тапом по строке курса на главном экране
+  или из контекстного меню любой валюты в списке
 
 ## Стек
 
@@ -203,10 +206,16 @@ scripts/verify-docker.sh
 |---|---|
 | ![](docs/screenshots/app-cold-start.png) | ![](docs/screenshots/app-offline.png) |
 
+| История за месяц | Без сети, данных нет | Без сети, данные в памяти |
+|---|---|---|
+| ![](docs/screenshots/app-history-month.png) | ![](docs/screenshots/app-history-offline.png) | ![](docs/screenshots/app-history-stale.png) |
+
 Превью SwiftUI:
 
 | Светлая тема | Тёмная тема |
 |---|---|
 | ![](docs/screenshots/converter-light.png) | ![](docs/screenshots/converter-dark.png) |
+
+Выделение точки драгом (превью, год): ![](docs/screenshots/history-selection-preview.png)
 
 Видео-демонстрация (`docs/demo.mp4`) будет добавлена позже.

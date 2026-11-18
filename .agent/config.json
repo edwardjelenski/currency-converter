@@ -18,7 +18,7 @@
     "mcp": {
       "xcode": {
         "XcodeOpenWorkspace": "open the generated .xcodeproj",
-        "RenderPreview": "render #Preview to PNG for UI checks and docs/screenshots",
+        "RenderPreview": "render #Preview to PNG for UI checks and docs/screenshots (incl. dark mode override)",
         "XcodeCloseWorkspace": "close the project before moving it to src/ios"
       },
       "ccd_turn": {
@@ -35,6 +35,7 @@
       "Claude_Code_iOS_Simulator": {
         "control: attach / launch / detach": "show the app in the simulator panel",
         "control: screenshot": "screens for verification and docs/screenshots",
+        "control: tap (incl. long press)": "navigation, period switching, context menu",
         "control: touch_path / swipe": "pull to refresh"
       }
     },
