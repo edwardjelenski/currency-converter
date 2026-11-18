@@ -35,14 +35,17 @@
     },
     "cli": {
       "git": "commits and push to main",
-      "gh": "auth status, repo create, gitignore template via gh api",
+      "gh": "auth status, repo create, gitignore template, package release lookups via gh api",
       "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
       "xcodebuild": "build and run tests",
       "xcrun simctl": "list and shut down simulators",
-      "swift": "toolchain version, SwiftPM package layout check",
-      "curl": "inspect Frankfurter API responses and headers, local server health check",
+      "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server",
+      "curl": "inspect Frankfurter responses, headers and edge cases (404 for future ranges, 522), local server checks",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
-      "sips": "resize screenshots"
+      "sips": "resize screenshots",
+      "sqlite3": "inspect the server database: stored days, sync_runs, journal mode",
+      "lsof": "check that a port is free before starting a server",
+      "pkill": "stop the local server and hung xcodebuild"
     }
   },
   "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused, never created by the agent",

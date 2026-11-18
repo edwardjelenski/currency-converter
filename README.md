@@ -20,7 +20,7 @@
 | Часть | Технологии |
 |---|---|
 | iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
-| Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST с ETag/Cache-Control, обновление курсов по расписанию — *в разработке* |
+| Сервер | Swift 6, Vapor 4, Fluent + SQLite, обновление курсов по расписанию; REST с ETag/Cache-Control — *в разработке* |
 | Инфраструктура | Docker Compose (сервер + volume с БД) — *в разработке* |
 
 Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
@@ -33,6 +33,7 @@
 ```
 .
 ├── README.md, PROMPTS.md, REFLECTION.md
+├── Package.swift                манифест SwiftPM сервера
 ├── src/
 │   ├── ios/                     iOS-клиент
 │   │   ├── project.yml          спецификация XcodeGen (.xcodeproj не коммитится)
@@ -45,10 +46,10 @@
 │   │       ├── styles/          цвета, шрифты, размеры (Theme)
 │   │       ├── resources/       Assets.xcassets
 │   │       └── preview/         тестовые данные для #Preview (только Debug)
-│   └── server/                  сервер — в разработке
+│   └── server/App/              сервер: entrypoint, services/, models/, migrations/, utils/
 ├── tests/
 │   ├── ios/                     unit-тесты клиента (Swift Testing)
-│   └── server/                  тесты сервера — в разработке
+│   └── server/                  тесты сервера (Swift Testing)
 ├── docs/
 │   ├── architecture.md          схема компонентов
 │   └── screenshots/             скриншоты
@@ -59,7 +60,7 @@
 ```
 
 **Про `package.json` / `requirements.txt`.** В Swift их роль играет манифест
-SwiftPM `Package.swift`. Для сервера он будет лежать **в корне репозитория**:
+SwiftPM `Package.swift`. Для сервера он лежит **в корне репозитория**:
 SwiftPM не разрешает пакету ссылаться на исходники вне своей папки, а тесты по
 шаблону лежат в `tests/server`, поэтому корень — единственное место, откуда
 видны и `src/server`, и `tests/server`. У iOS-клиента сторонних зависимостей нет,
@@ -90,7 +91,40 @@ xcodebuild test -project CurrencyConverter.xcodeproj -scheme CurrencyConverter -
 
 ### Сервер
 
-*В разработке:* запуск через `docker compose up` будет описан здесь.
+Нужен Swift 6 (Xcode 16+ на macOS или Swift toolchain на Linux). Из корня репозитория:
+
+```bash
+swift run App serve
+```
+
+При первом запуске сервер создаёт `data/rates.sqlite`, загружает курсы за последний год
+и дальше обновляет их сам по будням после публикации ЕЦБ. В логе это выглядит так:
+
+```text
+[ INFO ] Sync (startup) started: backfill 2025-11-18...2026-11-18
+[ INFO ] Stored 30 currencies
+[ INFO ] Sync (startup) finished: backfill added 256 days (2025-11-18...2026-11-18), 7454 rates; 256 days in DB, latest 2026-11-18
+[ INFO ] Next sync at 2026-11-19 16:15 Europe/Berlin
+```
+
+После перезапуска сервер догружает только пропущенные дни.
+
+| Переменная | По умолчанию | |
+|---|---|---|
+| `DATABASE_PATH` | `data/rates.sqlite` | файл SQLite |
+| `BACKFILL_DAYS` | `365` | глубина истории при первом запуске |
+| `SYNC_TIME` | `16:15` | первая попытка обновления, Europe/Berlin |
+| `SYNC_ENABLED` | `true` | фоновое обновление курсов |
+| `UPSTREAM_BASE_URL` | `https://api.frankfurter.dev/v1/` | источник курсов |
+| `HOST`, `PORT` | `127.0.0.1`, `8080` | |
+
+Тесты сервера:
+
+```bash
+swift test
+```
+
+REST API и запуск через `docker compose up` — следующие шаги, см. [docs/architecture.md](docs/architecture.md#10-текущее-состояние-и-план).
 
 ## Скриншоты
 

@@ -121,7 +121,11 @@ flowchart TB
 
 ### `GET /currencies`
 
-Список валют, для которых есть курсы.
+Список валют, для которых есть курсы на последнюю дату.
+
+Набор валют со временем меняется: например, болгарский лев (BGN) ЕЦБ публиковал до 31.12.2025,
+а с 2026 года Болгария перешла на евро. Поэтому `/currencies` и `/rates` отдают только валюты,
+у которых есть курс на соответствующую дату, а `/timeseries` — только дни, где курс был.
 
 ```json
 { "currencies": [ { "code": "AUD", "name": "Australian Dollar" }, { "code": "EUR", "name": "Euro" } ] }
@@ -160,11 +164,35 @@ flowchart TB
 
 ### `GET /health`
 
-Для healthcheck в Docker и для отладки.
+Состояние данных и синхронизации: используется в healthcheck Docker Compose и на демо,
+чтобы было видно, какие курсы лежат в базе и чем закончился последний синк.
 
 ```json
-{ "status": "ok", "latestRateDate": "2026-11-18", "lastSyncAt": "2026-11-18T15:16:02Z", "lastSyncStatus": "success" }
+{
+  "status": "ok",
+  "latestRateDate": "2026-11-18",
+  "storedDays": 256,
+  "lastSync": {
+    "trigger": "scheduled",
+    "status": "success",
+    "startedAt": "2026-11-18T15:15:00Z",
+    "finishedAt": "2026-11-18T15:15:02Z",
+    "datesAdded": 1,
+    "error": null
+  },
+  "nextSyncAt": "2026-11-19T15:15:00Z"
+}
 ```
+
+| `status` | HTTP | Когда |
+|---|---|---|
+| `ok` | 200 | курсы есть, последний синк успешный или «нет новых данных» |
+| `degraded` | 200 | курсы есть, но последний синк упал (источник недоступен) — API продолжает отдавать то, что в базе |
+| `not_ready` | 503 | в базе ещё нет ни одного дня (идёт первый бэкфилл) |
+
+Healthcheck в Compose проверяет HTTP-код: контейнер «здоров», как только в базе есть курсы.
+Сбой внешнего источника (`degraded`) не делает контейнер нездоровым — перезапуск сервера
+источник не починит, а данные из базы по-прежнему отдаются.
 
 ### Ошибки
 
@@ -209,8 +237,9 @@ flowchart TB
 - Срок истёк или pull-to-refresh → запрос с `If-None-Match`; `304` → продлеваем срок, тело не качаем.
 - Нет сети → показываем кэш и время последнего обновления.
 
-**Сервер к внешнему источнику** делает то же самое: Frankfurter отдаёт `ETag`, синхронизация
-шлёт `If-None-Match` и при `304` сразу понимает, что новых курсов нет.
+**Сервер к внешнему источнику** не делает лишних запросов по-другому: он знает последнюю
+сохранённую дату и спрашивает только диапазон после неё (`/{дата+1}..{сегодня}`). Если сегодняшние
+курсы уже в базе или в диапазоне нет рабочих дней, запроса нет вовсе.
 
 ---
 
@@ -226,16 +255,23 @@ Vapor — самый распространённый серверный фре�
 Package.swift                    манифест в корне (см. README)
 src/server/App/
 ├── entrypoint.swift             точка входа, @main
-├── configure.swift              БД, миграции, middleware, маршруты, планировщик
-├── controllers/                 Currencies-, Rates-, Timeseries-, HealthController
-├── services/                    RatesService, RatesSyncService, SyncScheduler,
-│                                UpstreamRatesSource + FrankfurterSource
-├── models/                      Fluent-модели и DTO ответов
-├── migrations/                  создание таблиц и индексов
-└── utils/                       HTTPCachingMiddleware, Decimal ↔ String, разбор дат
+├── configure.swift              БД, миграции, синхронизация, маршруты
+├── AppConfig.swift              настройки из переменных окружения
+├── routes.swift                 маршруты
+├── controllers/                 Currencies-, Rates-, Timeseries-, HealthController   (шаг 2)
+├── services/                    UpstreamRatesSource + FrankfurterSource, RatesStore,
+│                                RatesSyncService, SyncSchedule, SyncScheduler,
+│                                RatesService (шаг 2)
+├── models/                      CurrencyModel, SyncRun (Fluent), DailyRates
+├── migrations/                  CreateCurrencies, CreateRates, CreateSyncRuns
+└── utils/                       RateDate, TimeOfDay; HTTPCachingMiddleware (шаг 2)
 tests/server/                    тесты сервера
 tests/fixtures/cross-rates.json  общие тест-векторы для сервера и клиента
 ```
+
+Fluent используется для миграций и моделей `currencies` и `sync_runs`. Таблица `rates` пишется
+пакетными upsert'ами (`INSERT … ON CONFLICT DO UPDATE`), которых нет в модельном API Fluent,
+поэтому `RatesStore` работает с ней через SQLKit на том же соединении.
 
 ### Хранилище (SQLite)
 
@@ -253,10 +289,14 @@ erDiagram
     }
     sync_runs {
         INTEGER id PK
+        TEXT trigger "startup / scheduled"
         TEXT started_at
         TEXT finished_at
-        TEXT status "success / no_new_data / failed"
+        TEXT status "running / success / no_new_data / failed"
+        TEXT range_start
+        TEXT range_end
         INTEGER dates_added
+        TEXT latest_rate_date
         TEXT error
     }
 ```
@@ -364,19 +404,27 @@ sequenceDiagram
     participant D as SQLite
 
     Note over S: будни, 16:15 Europe/Berlin
-    S->>Y: sync()
-    Y->>D: последняя сохранённая дата
-    Y->>U: GET /latest?base=EUR (If-None-Match)
-    alt 304 или дата уже есть в БД
-        U-->>Y: курсы не изменились
-        Y->>D: sync_runs: no_new_data
-        Y-->>S: нет новых курсов
-        S->>S: повтор через 30 мин (до 19:00)
-    else новые курсы
-        U-->>Y: 200, курсы за сегодня + ETag
-        Y->>D: BEGIN, upsert rates, sync_runs success, COMMIT
-        Y-->>S: готово
-        S->>S: сон до следующего рабочего дня
+    S->>Y: sync(trigger: scheduled)
+    Y->>D: последняя сохранённая дата L
+    alt L уже сегодня
+        Y-->>S: актуально, запроса нет
+    else есть рабочие дни после L
+        Y->>U: GET /{L+1}..{сегодня}?base=EUR
+        alt 404 — за эти дни ещё ничего не опубликовано
+            U-->>Y: not found
+            Y->>D: sync_runs: no_new_data
+            Y-->>S: нет новых курсов
+            S->>S: повтор через 30 мин (до 19:00)
+        else 200
+            U-->>Y: курсы по дням
+            Y->>D: BEGIN, upsert rates, sync_runs success, COMMIT
+            Y-->>S: добавлено N дней
+            S->>S: сон до следующего рабочего дня
+        else 5xx или таймаут
+            Y->>U: до 3 попыток с паузой
+            Y->>D: sync_runs: failed + текст ошибки
+            S->>S: повтор через 30 мин
+        end
     end
 ```
 
@@ -533,12 +581,15 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 
 ## 10. Текущее состояние и план
 
-**Сейчас:** есть iOS-клиент; он временно ходит во Frankfurter напрямую через `FrankfurterClient`,
-кэширует последний ответ без `ETag`. Сервера ещё нет.
+**Сейчас:**
+- Сервер: хранилище SQLite, синхронизация с бэкфиллом за год и догрузкой пропусков, планировщик —
+  готово и покрыто тестами (шаг 1). REST-эндпоинтов ещё нет.
+- iOS-клиент временно ходит во Frankfurter напрямую через `FrankfurterClient` и кэширует
+  последний ответ без `ETag`.
 
 **План:**
 
-1. Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.
+1. ~~Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.~~ Готово.
 2. Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.
 3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`.
 4. Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.

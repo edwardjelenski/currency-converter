@@ -156,3 +156,38 @@ project-root/:
 **Файлы:** `docs/architecture.md`, `README.md`, `.agent/prompt-log.md`, `.agent/errors.md`, `.agent/config.json`
 
 **Коммиты:** Design client-server architecture in docs/architecture.md
+
+---
+
+## 5. 2026-11-18 20:31
+
+**Запрос:**
+
+```text
+архитектура ок, гибрид с кросс курсами поддерживаю, свой планировщик вместо Queues+redis тоже. одна правка: /health пусть отдает не просто ok а дату последних курсов и статус последнего синка - пригодится для healthcheck в компоузе и на демо
+
+начинай сервер, пункт 1 из плана: Package.swift в корне, vapor + fluent sqlite, миграции, RatesSyncService с бэкфиллом за год и догрузкой пропущенных дней, SyncScheduler. источник за протоколом UpstreamRatesSource. подними локально и покажи по логам что бэкфилл прошел и сколько дней легло в базу
+```
+
+**Что сделано:**
+- `docs/architecture.md`: расширил `/health` (дата последних курсов, число дней в базе, последний синк
+  с триггером/статусом/ошибкой, время следующего синка; `ok` / `degraded` / `not_ready` и HTTP-коды
+  для healthcheck), обновил поток 7.1 и схему `sync_runs`
+- Проверил окружение: Vapor 5 ещё в бете → взят Vapor 4.122; Frankfurter отвечает 404 на диапазон
+  без публикаций и иногда 522 → в источнике 404 = «нет данных», 5xx/429/сетевые ошибки — повтор
+- `Package.swift` в корне (Vapor, Fluent, FluentSQLiteDriver, NIOCore), миграции `currencies`,
+  `rates` (ключ `date+currency`, курс как TEXT, индекс `currency+date`), `sync_runs`
+- `UpstreamRatesSource` + `FrankfurterSource`, `RatesStore` (upsert через SQLKit),
+  `RatesSyncService` (бэкфилл / догрузка / ежедневное обновление одним путём, журнал в `sync_runs`),
+  `SyncSchedule` + `SyncScheduler` (старт, будни 16:15 Berlin, повторы до 19:00), `AppConfig` из env
+- 22 теста сервера (Swift Testing, SQLite в памяти, заглушка источника) — проходят
+- Запуск локально с пустой базой: бэкфилл добавил **256 дней** (2025-11-18…2026-11-18),
+  7454 курса, 30 валют, WAL. Проверка догрузки: удалил 3 последних дня, перезапустил —
+  сервер запросил только 2026-11-14…2026-11-18 и добавил 3 дня
+- README: запуск сервера, переменные окружения, пример лога; architecture: структура, BGN, статус плана
+
+**Файлы:** `Package.swift`, `Package.resolved`, `.gitignore`, `src/server/App/**`, `tests/server/**`,
+`docs/architecture.md`, `README.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `7ddf81a` Add Vapor server with SQLite storage and scheduled rates sync ·
+`1bc83ab` Add server tests for sync, schedule and dates · Document server sync step and /health
