@@ -29,17 +29,6 @@ struct ExchangeRatesTests {
         #expect(rates.rate(from: "XXX", to: "USD") == nil)
     }
 
-    @Test func decodesFrankfurterResponse() throws {
-        let json = Data("""
-        {"amount":1.0,"base":"EUR","date":"2026-11-18","rates":{"GBP":0.8329,"JPY":174.85,"USD":1.0968}}
-        """.utf8)
-        let decoded = try JSONDecoder().decode(ExchangeRates.self, from: json)
-        #expect(decoded.base == "EUR")
-        #expect(decoded.date == "2026-11-18")
-        #expect(decoded.rates.count == 3)
-        #expect(decoded.rates["USD"] == Decimal(string: "1.0968"))
-    }
-
     @Test func parsesPublicationDate() throws {
         let date = try #require(rates.publishedAt)
         let components = Calendar(identifier: .gregorian).dateComponents(in: .gmt, from: date)

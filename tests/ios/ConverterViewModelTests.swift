@@ -5,13 +5,13 @@ import Testing
 @MainActor
 struct ConverterViewModelTests {
     private func makeModel(
-        provider: StubRatesProvider = StubRatesProvider(result: .success(.fixture)),
+        api: MockRatesAPI = MockRatesAPI(),
         cache: RatesCache = makeTemporaryCache(),
         defaults: UserDefaults = makeIsolatedDefaults(),
         locale: Locale = Locale(identifier: "en_US")
     ) -> ConverterViewModel {
         ConverterViewModel(
-            repository: RatesRepository(provider: provider, cache: cache),
+            repository: RatesRepository(api: api, cache: cache),
             defaults: defaults,
             locale: locale
         )
@@ -55,9 +55,10 @@ struct ConverterViewModelTests {
 
     @Test func offlineFallsBackToCachedRates() async throws {
         let cache = makeTemporaryCache()
-        try await cache.save(CachedRates(rates: .fixture, fetchedAt: .now))
+        // Expired cache, so loading tries the network.
+        try await cache.save(.fixture(at: .now.addingTimeInterval(-7200)))
         let model = makeModel(
-            provider: StubRatesProvider(result: .failure(URLError(.notConnectedToInternet))),
+            api: MockRatesAPI(.failure(URLError(.cannotConnectToHost))),
             cache: cache
         )
 
@@ -69,12 +70,54 @@ struct ConverterViewModelTests {
     }
 
     @Test func offlineWithoutCacheShowsError() async {
-        let model = makeModel(provider: StubRatesProvider(result: .failure(URLError(.notConnectedToInternet))))
+        let model = makeModel(api: MockRatesAPI(.failure(URLError(.cannotConnectToHost))))
 
         await model.load()
 
         #expect(!model.hasRates)
         #expect(model.errorMessage != nil)
+    }
+
+    @Test func launchWithFreshCacheWorksOfflineWithoutRequest() async throws {
+        let cache = makeTemporaryCache()
+        try await cache.save(.fixture())
+        let api = MockRatesAPI(.failure(URLError(.cannotConnectToHost)))
+        let model = makeModel(api: api, cache: cache)
+        model.amountText = "10"
+
+        await model.load()
+
+        #expect(await api.requestCount == 0)
+        #expect(model.errorMessage == nil)
+        #expect(model.lastRefreshSource == .cache)
+        #expect(model.convertedAmount == 5)
+    }
+
+    @Test func pullToRefreshRevalidatesWithETag() async throws {
+        let cache = makeTemporaryCache()
+        try await cache.save(.fixture())
+        let api = MockRatesAPI(.notModified(maxAge: 3600))
+        let model = makeModel(api: api, cache: cache)
+        await model.load()
+
+        await model.refresh()
+
+        #expect(await api.receivedETags == ["\"v1\""])
+        #expect(model.lastRefreshSource == .notModified)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func failedPullToRefreshKeepsShowingCachedRates() async throws {
+        let cache = makeTemporaryCache()
+        try await cache.save(.fixture())
+        let model = makeModel(api: MockRatesAPI(.failure(URLError(.cannotConnectToHost))), cache: cache)
+        await model.load()
+
+        await model.refresh()
+
+        #expect(model.hasRates)
+        #expect(model.errorMessage != nil)
+        #expect(model.convertedAmount != nil)
     }
 
     @Test func unsupportedSavedCurrencyFallsBack() async {
