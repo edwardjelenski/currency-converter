@@ -51,7 +51,7 @@ struct ConverterView: View {
         ScrollView {
             VStack(spacing: 24) {
                 if let errorMessage = model.errorMessage {
-                    OfflineBanner(message: errorMessage, fetchedAt: model.snapshot?.fetchedAt)
+                    OfflineBanner(message: errorMessage, savedAt: model.snapshot?.validatedAt)
                 }
                 converterCards
                 rateInfo
@@ -170,6 +170,6 @@ struct ConverterView: View {
 }
 
 #Preview("Offline, no cache") {
-    ConverterView(model: .preview(provider: FailingRatesProvider(), snapshot: nil))
+    ConverterView(model: .preview(api: OfflineRatesAPI(), snapshot: nil))
 }
 #endif

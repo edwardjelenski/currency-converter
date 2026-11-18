@@ -2,7 +2,8 @@ import SwiftUI
 
 struct OfflineBanner: View {
     let message: String
-    let fetchedAt: Date?
+    /// When the server last confirmed the shown rates.
+    let savedAt: Date?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -10,8 +11,8 @@ struct OfflineBanner: View {
                 .foregroundStyle(Theme.warning)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Couldn't update rates").font(.subheadline.weight(.semibold))
-                if let fetchedAt {
-                    Text("Showing rates saved \(fetchedAt.formatted(.relative(presentation: .named))).")
+                if let savedAt {
+                    Text("Showing rates last updated \(savedAt.formatted(.relative(presentation: .named))).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

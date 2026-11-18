@@ -98,20 +98,35 @@ final class ConverterViewModel {
 
     // MARK: Actions
 
-    /// Shows cached rates immediately, then fetches fresh ones.
+    /// How the last refresh ended; for diagnostics and the UI's "updated" line.
+    private(set) var lastRefreshSource: RatesRepository.Source?
+
+    /// Shows cached rates immediately, then asks the server if the cache has expired.
     func load() async {
         if snapshot == nil, let cached = await repository.cached() {
             apply(cached)
         }
-        await refresh()
+        await refresh(force: false)
     }
 
+    /// Pull to refresh: always asks the server (conditionally, so usually a cheap `304`).
     func refresh() async {
+        await refresh(force: true)
+    }
+
+    /// App returned to the foreground: ask only if the cache has expired.
+    func refreshIfNeeded() async {
+        await refresh(force: false)
+    }
+
+    private func refresh(force: Bool) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            apply(try await repository.refresh())
+            let result = try await repository.refresh(force: force)
+            apply(result.snapshot)
+            lastRefreshSource = result.source
             errorMessage = nil
         } catch is CancellationError {
             // The view went away or the user released pull-to-refresh early.

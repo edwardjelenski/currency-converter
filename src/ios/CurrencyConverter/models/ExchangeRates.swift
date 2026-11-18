@@ -4,7 +4,7 @@ import Foundation
 ///
 /// `rates[code]` is how many units of `code` one unit of `base` buys.
 /// The base currency itself is always treated as `1`.
-struct ExchangeRates: Codable, Hashable, Sendable {
+struct ExchangeRates: Hashable, Sendable {
     let base: String
     /// The day the rates were published, `yyyy-MM-dd`.
     let date: String
@@ -37,5 +37,34 @@ struct ExchangeRates: Codable, Hashable, Sendable {
     /// Publication date parsed from `date`.
     var publishedAt: Date? {
         try? Date(date, strategy: Date.ISO8601FormatStyle().year().month().day())
+    }
+}
+
+/// Stored with rates as decimal strings (`"1.0968"`) so they never pass through `Double`.
+extension ExchangeRates: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case base, date, rates
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        base = try container.decode(String.self, forKey: .base)
+        date = try container.decode(String.self, forKey: .date)
+        let texts = try container.decode([String: String].self, forKey: .rates)
+        var rates: [String: Decimal] = [:]
+        for (code, text) in texts {
+            guard let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) else {
+                throw DecodingError.dataCorruptedError(forKey: .rates, in: container, debugDescription: "Invalid \(code) rate '\(text)'")
+            }
+            rates[code] = value
+        }
+        self.rates = rates
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(base, forKey: .base)
+        try container.encode(date, forKey: .date)
+        try container.encode(rates.mapValues(\.description), forKey: .rates)
     }
 }

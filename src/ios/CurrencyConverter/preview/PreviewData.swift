@@ -16,25 +16,38 @@ extension ExchangeRates {
     )
 }
 
-struct StaticRatesProvider: RatesProviding {
+/// Answers like our server would, without a network.
+struct PreviewRatesAPI: RatesAPI {
     var rates: ExchangeRates = .sample
-    func latestRates() async throws -> ExchangeRates { rates }
+
+    func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
+        etag == nil ? .modified(rates, etag: "\"preview\"", maxAge: 3600) : .notModified(maxAge: 3600)
+    }
 }
 
-struct FailingRatesProvider: RatesProviding {
-    func latestRates() async throws -> ExchangeRates { throw URLError(.notConnectedToInternet) }
+/// The server is unreachable.
+struct OfflineRatesAPI: RatesAPI {
+    func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
+        throw URLError(.cannotConnectToHost)
+    }
+}
+
+extension CachedRates {
+    static func sample(at date: Date = .now) -> CachedRates {
+        CachedRates(rates: .sample, etag: "\"preview\"", fetchedAt: date, validatedAt: date, expiresAt: date.addingTimeInterval(3600))
+    }
 }
 
 extension ConverterViewModel {
     /// A model that already holds data, so previews render without waiting for `.task`.
     static func preview(
-        provider: any RatesProviding = StaticRatesProvider(),
-        snapshot: CachedRates? = CachedRates(rates: .sample, fetchedAt: .now)
+        api: any RatesAPI = PreviewRatesAPI(),
+        snapshot: CachedRates? = .sample()
     ) -> ConverterViewModel {
         let suite = "preview.\(UUID().uuidString)"
         return ConverterViewModel(
             repository: RatesRepository(
-                provider: provider,
+                api: api,
                 cache: RatesCache(fileURL: URL.temporaryDirectory.appending(path: "\(suite).json"))
             ),
             defaults: UserDefaults(suiteName: suite)!,
