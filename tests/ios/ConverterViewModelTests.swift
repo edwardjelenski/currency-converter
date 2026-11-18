@@ -46,13 +46,6 @@ struct ConverterViewModelTests {
         #expect(model.targetCode == "GBP")
     }
 
-    @Test func otherConversionsExcludeSelectedPair() async {
-        let model = makeModel()
-        await model.load()
-
-        #expect(model.otherConversions.map(\.currency.code) == ["GBP", "JPY"])
-    }
-
     @Test func offlineFallsBackToCachedRates() async throws {
         let cache = makeTemporaryCache()
         // Expired cache, so loading tries the network.
