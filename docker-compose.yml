@@ -1,0 +1,36 @@
+# Currency Converter server.
+#   docker compose up -d --build     build and start
+#   docker compose ps                health: starting → healthy
+#   curl localhost:8080/health
+name: currency-converter
+
+services:
+  server:
+    build: .
+    image: currency-converter-server
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      DATABASE_PATH: /data/rates.sqlite
+      BACKFILL_DAYS: "365"
+      SYNC_TIME: "16:15"
+      # Vapor's production default is "notice", which would hide sync progress.
+      LOG_LEVEL: info
+    volumes:
+      # The database lives in a named volume, so it survives `down` / `up`.
+      # Only `docker compose down -v` deletes it.
+      - rates-data:/data
+    healthcheck:
+      # /health answers 503 until the first rates are stored, 200 afterwards
+      # (also when the upstream is down — stored rates are still served).
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # The first start downloads a year of rates before /health turns 200.
+      start_period: 120s
+      start_interval: 3s
+    restart: unless-stopped
+
+volumes:
+  rates-data:

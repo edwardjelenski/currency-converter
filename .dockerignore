@@ -1,0 +1,13 @@
+# Only Package.*, src/server and tests/server are needed to build the server.
+.git
+.build
+.swiftpm
+data
+src/ios
+tests/ios
+docs
+.agent
+build
+DerivedData
+*.xcodeproj
+*.md
