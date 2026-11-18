@@ -9,14 +9,24 @@ actor MockRatesAPI: RatesAPI {
         case failure(URLError)
     }
 
+    struct HistoryRequest: Sendable, Equatable {
+        let base: String
+        let target: String
+        let start: Date
+        let end: Date
+    }
+
     private var reply: Reply
     private(set) var receivedETags: [String?] = []
+    private var historyReply: Result<RateHistory, any Error> = .failure(URLError(.badServerResponse))
+    private(set) var historyRequests: [HistoryRequest] = []
 
     init(_ reply: Reply = .ok(.fixture, etag: "\"v1\"", maxAge: 3600)) {
         self.reply = reply
     }
 
     func setReply(_ reply: Reply) { self.reply = reply }
+    func setHistory(_ result: Result<RateHistory, any Error>) { historyReply = result }
 
     var requestCount: Int { receivedETags.count }
 
@@ -27,6 +37,11 @@ actor MockRatesAPI: RatesAPI {
         case let .notModified(maxAge): return .notModified(maxAge: maxAge)
         case let .failure(error): throw error
         }
+    }
+
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
+        historyRequests.append(HistoryRequest(base: base, target: target, start: start, end: end))
+        return try historyReply.get()
     }
 }
 
@@ -89,4 +104,11 @@ func makeTemporaryCache() -> RatesCache {
 
 func makeIsolatedDefaults() -> UserDefaults {
     UserDefaults(suiteName: "tests.\(UUID().uuidString)")!
+}
+
+/// Builds a history from `yyyy-MM-dd: rate` pairs.
+func makeHistory(base: String = "USD", target: String = "EUR", _ points: [(String, String)]) -> RateHistory {
+    RateHistory(base: base, target: target, points: points.map { day, rate in
+        RatePoint(day: day, date: RateDay.date(from: day)!, rate: Decimal(string: rate)!)
+    })
 }

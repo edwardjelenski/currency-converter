@@ -1,0 +1,135 @@
+import Foundation
+import Testing
+@testable import CurrencyConverter
+
+@MainActor
+struct RateHistoryViewModelTests {
+    let month = makeHistory([("2026-10-20", "0.90"), ("2026-11-18", "0.9117")])
+
+    private func makeModel(_ api: MockRatesAPI, period: HistoryPeriod = .month) -> RateHistoryViewModel {
+        RateHistoryViewModel(
+            base: "USD", target: "EUR", period: period,
+            repository: RateHistoryRepository(api: api),
+            locale: Locale(identifier: "en_US")
+        )
+    }
+
+    @Test func loadsChart() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let model = makeModel(api)
+
+        await model.load()
+
+        #expect(model.content == .chart(month))
+        #expect(model.staleNotice == nil)
+        #expect(model.loadedAt != nil)
+    }
+
+    @Test func noDataIsEmptyState() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.failure(RatesAPIError.server(status: 404, code: "no_data", message: "No rates")))
+        let model = makeModel(api)
+
+        await model.load()
+
+        guard case .empty = model.content else {
+            Issue.record("Expected empty, got \(model.content)")
+            return
+        }
+    }
+
+    @Test func singleDayIsEmptyState() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(makeHistory([("2026-11-18", "0.91")])))
+        let model = makeModel(api, period: .week)
+
+        await model.load()
+
+        guard case let .empty(message) = model.content else {
+            Issue.record("Expected empty, got \(model.content)")
+            return
+        }
+        #expect(message.contains("working days"))
+    }
+
+    @Test(arguments: [URLError.Code.cannotConnectToHost, .notConnectedToInternet, .timedOut])
+    func offlineWithoutDataIsOfflineError(code: URLError.Code) async {
+        let api = MockRatesAPI()
+        await api.setHistory(.failure(URLError(code)))
+        let model = makeModel(api)
+
+        await model.load()
+
+        guard case let .failed(failure) = model.content else {
+            Issue.record("Expected failure, got \(model.content)")
+            return
+        }
+        #expect(failure.isOffline)
+        #expect(failure.title == "No connection")
+    }
+
+    @Test func serverErrorShowsServerMessage() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.failure(RatesAPIError.server(status: 503, code: "not_ready", message: "Rates are still being loaded. Try again shortly.")))
+        let model = makeModel(api)
+
+        await model.load()
+
+        #expect(model.content == .failed(.init(
+            title: "Couldn't load history",
+            message: "Rates are still being loaded. Try again shortly.",
+            isOffline: false
+        )))
+    }
+
+    @Test func offlineReloadKeepsChartFromMemoryWithNotice() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let model = makeModel(api)
+        await model.load()
+
+        await api.setHistory(.failure(URLError(.cannotConnectToHost)))
+        await model.load()
+
+        #expect(model.content == .chart(month))
+        #expect(model.staleNotice?.contains("Can't reach") == true)
+    }
+
+    @Test func periodSelectsTheRequestedRange() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let model = makeModel(api)
+
+        model.period = .year
+        await model.load()
+
+        let request = await api.historyRequests.last
+        let days = request.map { Calendar.current.dateComponents([.day], from: $0.start, to: $0.end).day ?? 0 }
+        #expect((365...366).contains(days ?? 0))
+        #expect(request?.base == "USD")
+        #expect(request?.target == "EUR")
+    }
+
+    @Test func swapReversesThePairAndTheRequest() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let model = makeModel(api)
+        let before = model.requestID
+
+        model.swapPair()
+        await model.load()
+
+        #expect(model.title == "EUR → USD")
+        #expect(model.requestID != before)
+        #expect(await api.historyRequests.last?.base == "EUR")
+    }
+
+    @Test func formatsChangeWithSign() {
+        let model = makeModel(MockRatesAPI())
+        #expect(model.format(change: Decimal(string: "0.0123")!) == "+1.23%")
+        #expect(model.format(change: Decimal(string: "-0.004")!) == "-0.40%")
+        #expect(model.format(rate: Decimal(string: "0.911743")!) == "0.911743")
+        #expect(model.format(rate: Decimal(string: "159.418")!) == "159.418")
+    }
+}
