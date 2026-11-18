@@ -40,12 +40,16 @@
       "xcodebuild": "build and run tests",
       "xcrun simctl": "list and shut down simulators",
       "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server",
-      "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304",
+      "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304; Docker Hub tag lookup; healthcheck command",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
       "sips": "resize screenshots",
       "sqlite3": "inspect the server database: stored days, sync_runs, journal mode",
-      "lsof": "check that a port is free before starting a server",
-      "pkill": "stop the local server and hung xcodebuild"
+      "lsof": "check that a port is free; find a server PID by port",
+      "pkill": "stop the local server and hung xcodebuild",
+      "ruby": "parse docker-compose.yml as YAML (no Docker available)",
+      "shellcheck": "lint scripts/verify-docker.sh",
+      "kill": "send SIGTERM to imitate docker stop",
+      "docker": "NOT available on this machine (not installed); scripts/verify-docker.sh is ready for when it is"
     },
     "frameworks_for_tests": {
       "Swift Testing": "all iOS and server tests",

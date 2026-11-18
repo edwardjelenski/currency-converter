@@ -230,3 +230,35 @@ project-root/:
 **Коммиты:** `79f303e` Add REST API: /currencies, /rates, /timeseries, /health ·
 `9e23776` Reject implausible upstream data and make the scheduler clock injectable ·
 `863589f` Test endpoints, HTTP caching, upstream failures and schedule · Document REST API step
+
+---
+
+## 7. 2026-11-18 20:56
+
+**Запрос:**
+
+```text
+multistage Dockerfile + docker-compose.yml. проверь что docker compose up с нуля поднимается, healthcheck зеленеет, после down/up база на месте. если докер не запущен скажи, сам ничего не ставь
+```
+
+**Что сделано:**
+- Проверил окружение: Docker не установлен вовсе (нет CLI, Docker Desktop, OrbStack, Colima, Podman,
+  Rancher, сокета). Ничего не устанавливал
+- `Dockerfile`: build на `swift:6.4-noble` (тег проверен на Docker Hub), отдельный слой `swift package resolve`,
+  `--static-swift-stdlib` + jemalloc; run на `ubuntu:noble` с `ca-certificates`, `tzdata`, `curl`,
+  пользователь `vapor`, `/data` под volume, `ENV HOST/PORT/DATABASE_PATH/LOG_LEVEL`
+- `docker-compose.yml`: именованный volume `rates-data`, healthcheck `curl -f /health`
+  (`start_period` 120s под бэкфилл), `LOG_LEVEL=info`, порт через `SERVER_PORT`; `.dockerignore`
+- Проверка без Docker: YAML разбирается (ruby); release-сборка на macOS; запуск release-бинарника с командой
+  и env контейнера на чистой базе — команда healthcheck даёт `22` (503) во время бэкфилла и `0` после;
+  бэкфилл 256 дней; `SIGTERM` завершает процесс сразу с кодом 0; повторный запуск — «up to date, 256 days»
+- `scripts/verify-docker.sh` — сквозная проверка (с нуля → healthy → down/up → те же дни в базе)
+  в отдельном compose-проекте со своим volume и портом; `shellcheck` чистый
+- README (раздел Docker Compose со статусом проверки), architecture (раздел 8, статус плана)
+
+**Не сделано:** реальный `docker compose up` — нужен установленный и запущенный Docker.
+
+**Файлы:** `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `scripts/verify-docker.sh`, `README.md`,
+`docs/architecture.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** Add multistage Dockerfile and Compose setup (not yet run in Docker)

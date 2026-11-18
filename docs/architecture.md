@@ -546,32 +546,43 @@ sequenceDiagram
 
 ## 8. Развёртывание
 
-Сервер запускается через Docker Compose из корня репозитория:
+Сервер запускается через Docker Compose из корня репозитория ([docker-compose.yml](../docker-compose.yml)):
 
 ```yaml
 services:
   server:
-    build: .                     # Dockerfile в корне: сборка swift:6 → запуск в slim-образе
-    ports: ["8080:8080"]
+    build: .
+    ports: ["${SERVER_PORT:-8080}:8080"]
     environment:
       DATABASE_PATH: /data/rates.sqlite
       BACKFILL_DAYS: "365"
+      LOG_LEVEL: info              # в production Vapor по умолчанию пишет только notice
     volumes:
-      - rates-data:/data         # БД переживает пересоздание контейнера
+      - rates-data:/data           # БД переживает down/up; удаляет только down -v
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
-      interval: 30s
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/health"]
+      start_period: 120s           # первый бэкфилл
+      start_interval: 3s
     restart: unless-stopped
-
 volumes:
   rates-data:
 ```
 
-Многоэтапный `Dockerfile`: в образе `swift:6.x` собирается release-бинарник, в итоговый
-`swift:6.x-slim` попадают только бинарник и нужные библиотеки.
-iOS-клиент собирается в Xcode, в Docker он не входит.
+[Dockerfile](../Dockerfile) — два этапа:
 
----
+| Этап | Образ | Что делает |
+|---|---|---|
+| build | `swift:6.4-noble` | `swift package resolve` отдельным слоем (кэшируется, пока не меняется `Package.*`), затем `swift build -c release --static-swift-stdlib` |
+| run | `ubuntu:noble` | только бинарник; рантайм Swift вместе с Foundation слинкован статически, тулчейн не нужен. Пакеты: `ca-certificates` (HTTPS к источнику), `tzdata` (расписание по Europe/Berlin), `curl` (healthcheck), `libjemalloc2` |
+
+Сервер в контейнере работает от непривилегированного пользователя `vapor`, папка `/data`
+принадлежит ему. `docker stop` шлёт `SIGTERM`, и Vapor завершается сразу, не дожидаясь `SIGKILL`.
+
+Healthcheck использует HTTP-код `/health`: `503 not_ready`, пока в базе нет курсов, затем `200`.
+Сбой источника (`degraded`) контейнер не роняет — см. раздел 3.
+
+`scripts/verify-docker.sh` проверяет всё это сквозным сценарием в отдельном compose-проекте.
+iOS-клиент собирается в Xcode, в Docker он не входит.
 
 ## 9. Тестирование
 
@@ -596,6 +607,8 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 - Сервер: хранилище, синхронизация с бэкфиллом и догрузкой, планировщик (шаг 1), REST API
   `/currencies`, `/rates`, `/timeseries`, `/health` с ETag/304 и Cache-Control, единый формат ошибок
   (шаг 2) — готово, 52 теста.
+- Docker (шаг 3): `Dockerfile`, `docker-compose.yml` и скрипт проверки написаны; запуск в Docker
+  ещё не проверен — на машине разработки Docker не установлен.
 - iOS-клиент временно ходит во Frankfurter напрямую через `FrankfurterClient` и кэширует
   последний ответ без `ETag`.
 
@@ -603,7 +616,7 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 
 1. ~~Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.~~ Готово.
 2. ~~Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.~~ Готово.
-3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`.
+3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`. Файлы готовы, проверка ждёт Docker (`scripts/verify-docker.sh`).
 4. Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.
 5. Клиент: экран истории курса на Swift Charts.
 6. Общие тест-векторы кросс-курсов, скриншоты и видео работающего приложения.

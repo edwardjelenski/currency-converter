@@ -21,7 +21,7 @@
 |---|---|
 | iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
 | Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST API с ETag/Cache-Control, обновление курсов по расписанию |
-| Инфраструктура | Docker Compose (сервер + volume с БД) — *в разработке* |
+| Инфраструктура | Docker (multistage: `swift:6.4-noble` → `ubuntu:noble`), Docker Compose с healthcheck и volume для БД |
 
 Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
 у внешнего источника (Frankfurter / ЕЦБ) и хранит их в SQLite.
@@ -46,10 +46,13 @@
 │   │       ├── styles/          цвета, шрифты, размеры (Theme)
 │   │       ├── resources/       Assets.xcassets
 │   │       └── preview/         тестовые данные для #Preview (только Debug)
-│   └── server/App/              сервер: entrypoint, services/, models/, migrations/, utils/
+│   └── server/App/              сервер: entrypoint, controllers/, services/, models/, migrations/, utils/
 ├── tests/
 │   ├── ios/                     unit-тесты клиента (Swift Testing)
 │   └── server/                  тесты сервера (Swift Testing)
+├── Dockerfile                   сборка образа сервера (multistage)
+├── docker-compose.yml           сервер + volume с базой + healthcheck
+├── scripts/verify-docker.sh     сквозная проверка Docker Compose
 ├── docs/
 │   ├── architecture.md          схема компонентов
 │   └── screenshots/             скриншоты
@@ -159,7 +162,33 @@ cache-control: public, max-age=3600
 {"error":{"code":"unknown_currency","message":"Currency 'XYZ' is not supported."}}
 ```
 
-Запуск через `docker compose up` — следующий шаг, см. [план](docs/architecture.md#10-текущее-состояние-и-план).
+### Docker Compose
+
+```bash
+docker compose up -d --build
+docker compose ps          # STATUS: health: starting → healthy
+curl -s localhost:8080/health
+```
+
+- При первом запуске сервер загружает курсы за год. Пока их нет, `/health` отвечает `503`,
+  и контейнер в статусе `starting`; после бэкфилла — `healthy`.
+- База лежит в именованном volume `rates-data` и переживает `docker compose down` / `up`.
+  Удаляет её только `docker compose down -v`.
+- Порт на хосте меняется переменной `SERVER_PORT` (по умолчанию `8080`).
+
+Сквозная проверка — свежий старт, ожидание `healthy`, `down`/`up`, сохранность базы —
+одним скриптом. Он работает в отдельном compose-проекте со своим volume и портом `18080`,
+рабочие данные не трогает и убирает за собой:
+
+```bash
+scripts/verify-docker.sh
+```
+
+> **Статус проверки:** на машине разработки Docker не установлен, поэтому `docker compose up`
+> ещё не запускался. Проверено без Docker: release-сборка, запуск бинарника с командой и
+> переменными окружения контейнера (`serve --env production`, `HOST=0.0.0.0`, `LOG_LEVEL=info`),
+> команда healthcheck (`503` во время бэкфилла → `200`), завершение по `SIGTERM`, сохранность
+> базы после перезапуска. Сборка под Linux и сам Compose ждут запуска `scripts/verify-docker.sh`.
 
 ## Скриншоты
 
