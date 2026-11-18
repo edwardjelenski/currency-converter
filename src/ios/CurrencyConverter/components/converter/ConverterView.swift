@@ -1,15 +1,20 @@
 import SwiftUI
 
+/// Main screen: the pair converter, its rate (→ history) and the favorites list.
+///
+/// A `List` rather than a `ScrollView`: favorites need the system's swipe to delete
+/// and drag to reorder, which only `List` provides.
 struct ConverterView: View {
     @Bindable var model: ConverterViewModel
     let history: RateHistoryRepository
 
     @State private var picking: PickerTarget?
     @State private var path: [HistoryRoute] = []
+    @State private var editMode: EditMode = .inactive
     @FocusState private var amountFocused: Bool
 
     private enum PickerTarget: String, Identifiable {
-        case source, target
+        case source, target, favorites
         var id: String { rawValue }
     }
 
@@ -36,15 +41,7 @@ struct ConverterView: View {
                 }
             }
             .sheet(item: $picking) { target in
-                CurrencyPickerView(
-                    currencies: model.currencies,
-                    selection: target == .source ? model.sourceCode : model.targetCode
-                ) { code in
-                    switch target {
-                    case .source: model.sourceCode = code
-                    case .target: model.targetCode = code
-                    }
-                }
+                picker(for: target)
             }
         }
         .task { await model.load() }
@@ -53,18 +50,22 @@ struct ConverterView: View {
     // MARK: Content
 
     private var content: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                if let errorMessage = model.errorMessage {
-                    OfflineBanner(message: errorMessage, savedAt: model.snapshot?.validatedAt)
-                }
-                converterCards
-                rateInfo
-                otherCurrencies
+        List {
+            if let errorMessage = model.errorMessage {
+                OfflineBanner(message: errorMessage, savedAt: model.snapshot?.validatedAt)
+                    .plainListRow()
             }
-            .padding()
+            converterCards
+                .plainListRow()
+            rateInfo
+                .plainListRow()
+            favoritesSection
         }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+        .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .environment(\.editMode, $editMode)
         .refreshable { await model.refresh() }
     }
 
@@ -105,6 +106,8 @@ struct ConverterView: View {
                     .foregroundStyle(.white)
                     .overlay(Circle().stroke(Theme.background, lineWidth: 4))
             }
+            // In a List row a default-styled button makes the whole row its tap area.
+            .buttonStyle(.plain)
             .accessibilityLabel("Swap currencies")
         }
         .animation(.snappy, value: model.formattedResult)
@@ -115,7 +118,9 @@ struct ConverterView: View {
     @ViewBuilder
     private var rateInfo: some View {
         if let rateDescription = model.rateDescription {
-            NavigationLink(value: HistoryRoute(base: model.sourceCode, target: model.targetCode)) {
+            Button {
+                path.append(HistoryRoute(base: model.sourceCode, target: model.targetCode))
+            } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "chart.xyaxis.line")
                         .font(.body.weight(.semibold))
@@ -149,39 +154,110 @@ struct ConverterView: View {
         }
     }
 
-    @ViewBuilder
-    private var otherCurrencies: some View {
-        let conversions = model.otherConversions
-        if !conversions.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Other currencies")
-                    .font(.headline)
-                    .padding(.horizontal, 4)
+    // MARK: Favorites
 
-                LazyVStack(spacing: 0) {
-                    ForEach(conversions) { conversion in
-                        Button {
-                            withAnimation(.snappy) { model.targetCode = conversion.currency.code }
-                        } label: {
-                            ConversionRow(
-                                currency: conversion.currency,
-                                amount: model.format(conversion.amount, currency: conversion.currency.code)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Rate history", systemImage: "chart.xyaxis.line") {
-                                path.append(HistoryRoute(base: model.sourceCode, target: conversion.currency.code))
-                            }
-                        }
-
-                        if conversion.id != conversions.last?.id {
-                            Divider().padding(.leading, 56)
-                        }
+    private var favoritesSection: some View {
+        Section {
+            ForEach(model.favoriteConversions) { favorite in
+                Button {
+                    withAnimation(.snappy) { model.selectTarget(favorite.currency.code) }
+                } label: {
+                    ConversionRow(
+                        currency: favorite.currency,
+                        amount: favorite.amount.map { model.format($0, currency: favorite.currency.code) } ?? "No rate"
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Theme.surface)
+                .contextMenu {
+                    Button("Rate history", systemImage: "chart.xyaxis.line") {
+                        path.append(HistoryRoute(base: model.sourceCode, target: favorite.currency.code))
+                    }
+                    Button("Reorder", systemImage: "arrow.up.arrow.down") {
+                        withAnimation { editMode = .active }
+                    }
+                    Button("Remove from Favorites", systemImage: "star.slash", role: .destructive) {
+                        withAnimation { model.toggleFavorite(favorite.currency.code) }
                     }
                 }
-                .background(Theme.surface, in: .rect(cornerRadius: Theme.listCornerRadius))
+                .accessibilityHint("Makes it the currency you get")
             }
+            .onDelete { offsets in
+                withAnimation { model.removeFavorites(at: offsets) }
+            }
+            .onMove { offsets, destination in
+                model.moveFavorites(from: offsets, to: destination)
+            }
+
+            if model.favorites.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No favorites yet")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Add currencies to see the same amount in each of them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Add Currencies", systemImage: "plus") { picking = .favorites }
+                        .buttonStyle(.bordered)
+                        .padding(.top, 4)
+                }
+                .padding(.vertical, 6)
+                .listRowBackground(Theme.surface)
+            }
+        } header: {
+            HStack {
+                Text("Favorites")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if !model.favorites.isEmpty {
+                    Button(editMode.isEditing ? "Done" : "Edit") {
+                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                    }
+                    .font(.subheadline)
+                }
+                Button("Add to Favorites", systemImage: "plus.circle.fill") {
+                    picking = .favorites
+                }
+                .labelStyle(.iconOnly)
+                .font(.title3)
+            }
+            .textCase(nil)
+            .padding(.horizontal, -4)
+        }
+    }
+
+    // MARK: Picker
+
+    @ViewBuilder
+    private func picker(for target: PickerTarget) -> some View {
+        switch target {
+        case .source:
+            CurrencyPickerView(
+                title: "You send",
+                currencies: model.currencies,
+                recents: model.recentCurrencies,
+                selected: [model.sourceCode],
+                allowsMultipleSelection: false,
+                onSelect: { model.selectSource($0) }
+            )
+        case .target:
+            CurrencyPickerView(
+                title: "They get",
+                currencies: model.currencies,
+                recents: model.recentCurrencies,
+                selected: [model.targetCode],
+                allowsMultipleSelection: false,
+                onSelect: { model.selectTarget($0) }
+            )
+        case .favorites:
+            CurrencyPickerView(
+                title: "Favorites",
+                currencies: model.currencies,
+                recents: model.recentCurrencies,
+                selected: Set(model.favorites),
+                allowsMultipleSelection: true,
+                onSelect: { code in withAnimation { model.toggleFavorite(code) } }
+            )
         }
     }
 
@@ -197,9 +273,22 @@ struct ConverterView: View {
     }
 }
 
+private extension View {
+    /// A list row without the system background, insets or separators — for the cards.
+    func plainListRow() -> some View {
+        listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            .listRowSeparator(.hidden)
+    }
+}
+
 #if DEBUG
 #Preview("Converter") {
     ConverterView(model: .preview(), history: .preview())
+}
+
+#Preview("No favorites") {
+    ConverterView(model: .preview(favorites: []), history: .preview())
 }
 
 #Preview("Offline, no cache") {

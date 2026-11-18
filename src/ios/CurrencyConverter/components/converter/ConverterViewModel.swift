@@ -4,24 +4,36 @@ import Observation
 @MainActor
 @Observable
 final class ConverterViewModel {
-    struct Conversion: Identifiable, Hashable {
+    /// A favorite currency with the typed amount converted into it.
+    struct FavoriteConversion: Identifiable, Hashable {
         let currency: Currency
-        let amount: Decimal
+        /// `nil` when there's no rate for this currency (e.g. no longer published).
+        let amount: Decimal?
         var id: String { currency.code }
     }
 
-    // MARK: Input
+    // MARK: Input (persisted)
 
     var amountText: String {
-        didSet { defaults.set(amountText, forKey: Keys.amount) }
+        didSet { preferences.amountText = amountText }
     }
 
     var sourceCode: String {
-        didSet { defaults.set(sourceCode, forKey: Keys.source) }
+        didSet { preferences.sourceCode = sourceCode }
     }
 
     var targetCode: String {
-        didSet { defaults.set(targetCode, forKey: Keys.target) }
+        didSet { preferences.targetCode = targetCode }
+    }
+
+    /// Ordered list of currencies shown under the converter.
+    private(set) var favorites: [String] {
+        didSet { preferences.favorites = favorites }
+    }
+
+    /// Currencies picked recently, most recent first; shown on top of the picker.
+    private(set) var recents: [String] {
+        didSet { preferences.recents = recents }
     }
 
     // MARK: State
@@ -31,7 +43,7 @@ final class ConverterViewModel {
     private(set) var errorMessage: String?
 
     @ObservationIgnored private let repository: RatesRepository
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let preferences: PreferencesStore
     @ObservationIgnored let locale: Locale
 
     init(
@@ -40,13 +52,16 @@ final class ConverterViewModel {
         locale: Locale = .current,
         initialSnapshot: CachedRates? = nil
     ) {
+        let preferences = PreferencesStore(defaults: defaults)
         self.repository = repository
-        self.defaults = defaults
+        self.preferences = preferences
         self.locale = locale
         self.snapshot = initialSnapshot
-        self.amountText = defaults.string(forKey: Keys.amount) ?? "100"
-        self.sourceCode = defaults.string(forKey: Keys.source) ?? "USD"
-        self.targetCode = defaults.string(forKey: Keys.target) ?? "EUR"
+        self.amountText = preferences.amountText
+        self.sourceCode = preferences.sourceCode
+        self.targetCode = preferences.targetCode
+        self.favorites = preferences.favorites
+        self.recents = preferences.recents
     }
 
     // MARK: Derived values
@@ -82,16 +97,22 @@ final class ConverterViewModel {
         return "1 \(sourceCode) = \(formattedRate) \(targetCode)"
     }
 
-    /// The amount converted into every other currency, for the list below the converter.
-    var otherConversions: [Conversion] {
-        guard let amount, let rates else { return [] }
-        return rates.currencyCodes
-            .filter { $0 != sourceCode && $0 != targetCode }
-            .compactMap { code in
-                rates.convert(amount, from: sourceCode, to: code).map {
-                    Conversion(currency: Currency(code: code), amount: $0)
-                }
-            }
+    /// The typed amount in each favorite currency, in the user's order.
+    var favoriteConversions: [FavoriteConversion] {
+        favorites.map { code in
+            let converted = amount.flatMap { amount in rates?.convert(amount, from: sourceCode, to: code) }
+            return FavoriteConversion(currency: Currency(code: code), amount: converted)
+        }
+    }
+
+    /// Recently picked currencies that have rates, for the picker's first section.
+    var recentCurrencies: [Currency] {
+        let available = Set(rates?.currencyCodes ?? [])
+        return recents.filter(available.contains).map(Currency.init(code:))
+    }
+
+    func isFavorite(_ code: String) -> Bool {
+        favorites.contains(code)
     }
 
     var hasRates: Bool { snapshot != nil }
@@ -141,6 +162,47 @@ final class ConverterViewModel {
         (sourceCode, targetCode) = (targetCode, sourceCode)
     }
 
+    // MARK: Picking currencies
+
+    func selectSource(_ code: String) {
+        sourceCode = code
+        noteRecent(code)
+    }
+
+    func selectTarget(_ code: String) {
+        targetCode = code
+        noteRecent(code)
+    }
+
+    /// From the picker in favorites mode: adds at the end, or removes if already there.
+    func toggleFavorite(_ code: String) {
+        if let index = favorites.firstIndex(of: code) {
+            favorites.remove(at: index)
+        } else {
+            favorites.append(code)
+            noteRecent(code)
+        }
+    }
+
+    /// Swipe to delete.
+    func removeFavorites(at offsets: IndexSet) {
+        favorites = favorites.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+    }
+
+    /// Drag to reorder; same semantics as SwiftUI's `onMove` (destination is an index
+    /// in the list before the move).
+    func moveFavorites(from offsets: IndexSet, to destination: Int) {
+        let moving = offsets.sorted().map { favorites[$0] }
+        var remaining = favorites.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        let insertionIndex = destination - offsets.filter { $0 < destination }.count
+        remaining.insert(contentsOf: moving, at: insertionIndex)
+        favorites = remaining
+    }
+
+    private func noteRecent(_ code: String) {
+        recents = [code] + recents.filter { $0 != code }.prefix(PreferencesStore.maxRecents - 1)
+    }
+
     func format(_ value: Decimal, currency code: String) -> String {
         value.formatted(.currency(code: code).locale(locale))
     }
@@ -154,11 +216,5 @@ final class ConverterViewModel {
         if !codes.contains(targetCode) {
             targetCode = codes.contains("USD") && sourceCode != "USD" ? "USD" : snapshot.rates.base
         }
-    }
-
-    private enum Keys {
-        static let amount = "converter.amount"
-        static let source = "converter.sourceCurrency"
-        static let target = "converter.targetCurrency"
     }
 }

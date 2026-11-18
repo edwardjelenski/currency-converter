@@ -90,9 +90,13 @@ extension ConverterViewModel {
     /// A model that already holds data, so previews render without waiting for `.task`.
     static func preview(
         api: any RatesAPI = PreviewRatesAPI(),
-        snapshot: CachedRates? = .sample()
+        snapshot: CachedRates? = .sample(),
+        favorites: [String]? = nil
     ) -> ConverterViewModel {
         let suite = "preview.\(UUID().uuidString)"
+        if let favorites {
+            PreferencesStore(defaults: UserDefaults(suiteName: suite)!).favorites = favorites
+        }
         return ConverterViewModel(
             repository: RatesRepository(
                 api: api,

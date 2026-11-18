@@ -1,12 +1,39 @@
 import SwiftUI
 
+/// Searchable currency list with recently picked currencies on top.
+///
+/// Single selection (the pair) picks and closes; multiple selection (favorites)
+/// toggles checkmarks and stays open until Done.
 struct CurrencyPickerView: View {
+    let title: LocalizedStringKey
     let currencies: [Currency]
-    let selection: String
+    let allowsMultipleSelection: Bool
     let onSelect: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
+    /// Checkmarks are local state: a closure reading the model from inside `List` rows
+    /// isn't observed, so toggled rows wouldn't redraw.
+    @State private var selection: Set<String>
+    /// Most recent first, as of opening the picker; shown as its own section while not
+    /// searching. Frozen so that picking a currency doesn't shift the rows under the finger.
+    @State private var recents: [Currency]
+
+    init(
+        title: LocalizedStringKey,
+        currencies: [Currency],
+        recents: [Currency],
+        selected: Set<String>,
+        allowsMultipleSelection: Bool,
+        onSelect: @escaping (String) -> Void
+    ) {
+        self.title = title
+        self.currencies = currencies
+        _recents = State(initialValue: recents)
+        self.allowsMultipleSelection = allowsMultipleSelection
+        self.onSelect = onSelect
+        _selection = State(initialValue: selected)
+    }
 
     private var filtered: [Currency] {
         currencies
@@ -14,32 +41,23 @@ struct CurrencyPickerView: View {
             .sorted { $0.name().localizedStandardCompare($1.name()) == .orderedAscending }
     }
 
+    private var showsRecents: Bool {
+        query.trimmingCharacters(in: .whitespaces).isEmpty && !recents.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
-            List(filtered) { currency in
-                Button {
-                    onSelect(currency.code)
-                    dismiss()
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(currency.flag).font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(currency.name())
-                            Text(currency.code)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if currency.code == selection {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .fontWeight(.semibold)
-                        }
+            List {
+                if showsRecents {
+                    Section("Recent") {
+                        ForEach(recents) { row(for: $0) }
                     }
-                    .contentShape(.rect)
+                    Section("All Currencies") {
+                        ForEach(filtered) { row(for: $0) }
+                    }
+                } else {
+                    ForEach(filtered) { row(for: $0) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(currency.code == selection ? .isSelected : [])
             }
             .overlay {
                 if filtered.isEmpty {
@@ -47,22 +65,75 @@ struct CurrencyPickerView: View {
                 }
             }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Currency or code")
-            .navigationTitle("Currency")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                if allowsMultipleSelection {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
                 }
             }
         }
     }
+
+    private func row(for currency: Currency) -> some View {
+        let selected = selection.contains(currency.code)
+        return Button {
+            if allowsMultipleSelection {
+                if selected { selection.remove(currency.code) } else { selection.insert(currency.code) }
+            }
+            onSelect(currency.code)
+            if !allowsMultipleSelection { dismiss() }
+        } label: {
+            HStack(spacing: 12) {
+                Text(currency.flag).font(.title2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(currency.name())
+                    Text(currency.code)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if allowsMultipleSelection {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                } else if selected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                        .fontWeight(.semibold)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
 }
 
 #if DEBUG
-#Preview {
+#Preview("Pick one") {
     CurrencyPickerView(
+        title: "They get",
         currencies: ExchangeRates.sample.currencyCodes.map(Currency.init(code:)),
-        selection: "USD"
+        recents: ["GBP", "JPY", "CHF"].map(Currency.init(code:)),
+        selected: ["EUR"],
+        allowsMultipleSelection: false
+    ) { _ in }
+}
+
+#Preview("Favorites") {
+    CurrencyPickerView(
+        title: "Favorites",
+        currencies: ExchangeRates.sample.currencyCodes.map(Currency.init(code:)),
+        recents: ["GBP", "JPY"].map(Currency.init(code:)),
+        selected: ["EUR", "GBP", "JPY", "CHF"],
+        allowsMultipleSelection: true
     ) { _ in }
 }
 #endif

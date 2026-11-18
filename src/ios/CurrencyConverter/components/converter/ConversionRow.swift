@@ -22,8 +22,7 @@ struct ConversionRow: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, 4)
         .contentShape(.rect)
     }
 }
