@@ -362,3 +362,36 @@ preview/PreviewData.swift}`, `tests/ios/{FavoritesTests.swift, ConverterViewMode
 
 **Коммиты:** `cff8ee4` Add favorites with the same amount converted, and recent currencies ·
 `690c14e` Test favorites, recents and persistence across launches · Document favorites and recents
+
+---
+
+## 11. 2026-11-18 22:48
+
+**Запрос:**
+
+```text
+сумма крупно с monospacedDigit, хаптик на swap, dynamic type до accessibility размеров не ломает верстку, темная тема. сейчас строки на английском захардкожены - переведи на String Catalog, ru + en
+```
+
+**Что сделано:**
+- Суммы — `largeTitle` rounded с `monospacedDigit`; результат в полный размер, если помещается, иначе
+  ужимается (`ViewThatFits`); хаптик `.impact(.medium)` на смену валют (главный экран и история);
+  кнопка смены валют — в стеке между карточками, а не оверлеем
+- Dynamic Type: адаптивные раскладки на AX-размерах (карточки, строки избранного, заголовок «Избранное»,
+  шапка и плитки истории, строки пикера), ограничение значков и осей графика, меньше подписей оси X
+- Локализация: `Localizable.xcstrings` (60 строк) и `InfoPlist.xcstrings` («Валюты») с русским переводом;
+  строки из кода — через `String(localized:)`/`LocalizedStringResource`; проверено `-exportLocalizations`
+  (62 строки, без непереведённых) и тестами `LocalizationTests`
+- Инструменты Xcode MCP для каталогов строк не использованы: требуют отсутствующих в сессии skills, а
+  `LocalizationPlanner` правит `.xcodeproj`, который генерирует XcodeGen
+- Проверка: превью (ru, тёмная, AX3/AX5) и симулятор (ru, тёмная, AX5, домашний экран); найдено и исправлено
+  шесть проблем вёрстки на крупных размерах (см. errors.md); тесты сделаны независимыми от языка; 75 iOS-тестов
+- Настройки симулятора (язык, тема, размер текста) возвращены к исходным, симулятор выключен
+
+**Файлы:** `src/ios/project.yml`, `src/ios/CurrencyConverter/{resources/*.xcstrings, styles/Theme.swift, components/**, models/RateHistory.swift,
+services/RatesAPI.swift, preview/PreviewData.swift}`, `tests/ios/{LocalizationTests.swift, RateHistoryViewModelTests.swift}`,
+`README.md`, `docs/**`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `295ec9a` Polish the UI: big monospaced amounts, swap haptic, layouts up to AX5 ·
+`97f0217` Localize the app into Russian with String Catalogs · `10ccc49` Make tests language-independent and test the Russian bundle ·
+Document localization, dark mode and Dynamic Type

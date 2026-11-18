@@ -18,7 +18,7 @@
     "mcp": {
       "xcode": {
         "XcodeOpenWorkspace": "open the generated .xcodeproj",
-        "RenderPreview": "render #Preview to PNG for UI checks and docs/screenshots (incl. dark mode override)",
+        "RenderPreview": "render #Preview to PNG: UI checks, dark mode, Dynamic Type up to AX5, Russian via localization override; docs/screenshots",
         "XcodeCloseWorkspace": "close the project before moving it to src/ios"
       },
       "ccd_turn": {
@@ -44,8 +44,8 @@
       "git": "commits and push to main",
       "gh": "auth status, repo create, gitignore template, package release lookups via gh api",
       "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
-      "xcodebuild": "build the app and run iOS tests on the existing simulator",
-      "xcrun simctl": "list, boot, uninstall/launch/terminate the app, shutdown; 'spawn … log show' for the app's os_log lines; 'get_app_container' to read saved preferences",
+      "xcodebuild": "build the app, run iOS tests, -exportLocalizations to list extracted strings and check translations",
+      "xcrun simctl": "list, boot, uninstall/install/launch/terminate the app, shutdown; 'spawn … log show' for os_log; 'get_app_container'; 'ui appearance/content_size' and 'spawn defaults write -g AppleLanguages' for dark mode, Dynamic Type and language checks (restored afterwards)",
       "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server (also as the local server for simulator checks)",
       "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304; Docker Hub tag lookup; healthcheck command",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
@@ -78,5 +78,8 @@
     "xcode": "27.0",
     "swift": "6.4",
     "xcodegen": "2.46.0"
+  },
+  "tools_not_used": {
+    "xcode StringCatalogEdit / LocalizationPlanner": "require skills not available in this session; the planner edits the .xcodeproj, which XcodeGen regenerates — catalogs were written as JSON and verified with xcodebuild -exportLocalizations"
   }
 }

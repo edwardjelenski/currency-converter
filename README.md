@@ -15,6 +15,8 @@
 - В пикере валют сверху — недавно выбранные
 - Работа офлайн с последними загруженными курсами, pull-to-refresh
 - Между запусками сохраняются сумма, пара валют, избранное (с порядком) и недавние
+- Русский и английский интерфейс (String Catalog), светлая и тёмная тема, Dynamic Type вплоть до
+  самых крупных размеров (AX5) без поломки вёрстки, хаптик на смену валют
 - Ввод суммы с учётом локали: `1 234,5`, `1,234.5`, `1.234,5`
 - История курса пары на Swift Charts: периоды 1W / 1M / 3M / 1Y, значение на дату по драгу,
   минимум, максимум и изменение за период; открывается тапом по строке курса на главном экране
@@ -24,7 +26,7 @@
 
 | Часть | Технологии |
 |---|---|
-| iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
+| iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, Swift Charts, String Catalogs (en, ru), iOS 17+, XcodeGen, Swift Testing |
 | Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST API с ETag/Cache-Control, обновление курсов по расписанию |
 | Инфраструктура | Docker (multistage: `swift:6.4-noble` → `ubuntu:noble`), Docker Compose с healthcheck и volume для БД |
 
@@ -223,5 +225,11 @@ scripts/verify-docker.sh
 | ![](docs/screenshots/converter-light.png) | ![](docs/screenshots/converter-dark.png) |
 
 Выделение точки драгом (превью, год): ![](docs/screenshots/history-selection-preview.png)
+
+Русский, тёмная тема и самый крупный размер текста (AX5):
+
+| Русский | История, тёмная тема | AX5 + тёмная: конвертер | AX5 + тёмная: избранное |
+|---|---|---|---|
+| ![](docs/screenshots/ru-converter.png) | ![](docs/screenshots/ru-history-dark.png) | ![](docs/screenshots/ru-ax5-dark-converter.png) | ![](docs/screenshots/ru-ax5-dark-favorites.png) |
 
 Видео-демонстрация (`docs/demo.mp4`) будет добавлена позже.
