@@ -20,7 +20,7 @@
 | Часть | Технологии |
 |---|---|
 | iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, iOS 17+, XcodeGen, Swift Testing |
-| Сервер | Swift 6, Vapor 4, Fluent + SQLite, обновление курсов по расписанию; REST с ETag/Cache-Control — *в разработке* |
+| Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST API с ETag/Cache-Control, обновление курсов по расписанию |
 | Инфраструктура | Docker Compose (сервер + volume с БД) — *в разработке* |
 
 Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
@@ -124,7 +124,42 @@ swift run App serve
 swift test
 ```
 
-REST API и запуск через `docker compose up` — следующие шаги, см. [docs/architecture.md](docs/architecture.md#10-текущее-состояние-и-план).
+### REST API
+
+Полное описание — [docs/architecture.md](docs/architecture.md#3-rest-api). Примеры на живом сервере:
+
+```bash
+curl -s http://127.0.0.1:8080/health
+```
+```json
+{"lastSync":{"datesAdded":0,"finishedAt":"2026-11-18T17:51:48Z","startedAt":"2026-11-18T17:51:48Z","status":"no_new_data","trigger":"startup"},"latestRateDate":"2026-11-18","nextSyncAt":"2026-11-19T15:15:00Z","status":"ok","storedDays":256,"syncInProgress":false}
+```
+
+```bash
+curl -s "http://127.0.0.1:8080/rates?base=USD"                      # курсы к USD на последнюю дату
+curl -s "http://127.0.0.1:8080/rates?date=2026-11-15"               # воскресенье → курсы за пятницу 13-го
+curl -s "http://127.0.0.1:8080/timeseries?base=USD&symbols=GBP&start=2026-11-10&end=2026-11-18"
+curl -s http://127.0.0.1:8080/currencies
+```
+
+Повторный запрос с `ETag` из прошлого ответа возвращает `304` без тела:
+
+```bash
+curl -si -H 'If-None-Match: "8cbb9eb254492c79ecd32dccb73f5960"' http://127.0.0.1:8080/rates
+```
+```text
+HTTP/1.1 304 Not Modified
+etag: "8cbb9eb254492c79ecd32dccb73f5960"
+cache-control: public, max-age=3600
+```
+
+Ошибки в едином формате:
+
+```json
+{"error":{"code":"unknown_currency","message":"Currency 'XYZ' is not supported."}}
+```
+
+Запуск через `docker compose up` — следующий шаг, см. [план](docs/architecture.md#10-текущее-состояние-и-план).
 
 ## Скриншоты
 

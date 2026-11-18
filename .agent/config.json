@@ -40,12 +40,16 @@
       "xcodebuild": "build and run tests",
       "xcrun simctl": "list and shut down simulators",
       "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server",
-      "curl": "inspect Frankfurter responses, headers and edge cases (404 for future ranges, 522), local server checks",
+      "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
       "sips": "resize screenshots",
       "sqlite3": "inspect the server database: stored days, sync_runs, journal mode",
       "lsof": "check that a port is free before starting a server",
       "pkill": "stop the local server and hung xcodebuild"
+    },
+    "frameworks_for_tests": {
+      "Swift Testing": "all iOS and server tests",
+      "VaporTesting": "in-process HTTP tests of the server endpoints"
     }
   },
   "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused, never created by the agent",

@@ -177,12 +177,15 @@ flowchart TB
     "status": "success",
     "startedAt": "2026-11-18T15:15:00Z",
     "finishedAt": "2026-11-18T15:15:02Z",
-    "datesAdded": 1,
-    "error": null
+    "datesAdded": 1
   },
+  "syncInProgress": false,
   "nextSyncAt": "2026-11-19T15:15:00Z"
 }
 ```
+
+`lastSync` — последняя *завершённая* попытка (поле `error` появляется, только если она упала),
+`syncInProgress` — идёт ли синк прямо сейчас (например, первый бэкфилл). Пустые поля не выводятся.
 
 | `status` | HTTP | Когда |
 |---|---|---|
@@ -258,13 +261,14 @@ src/server/App/
 ├── configure.swift              БД, миграции, синхронизация, маршруты
 ├── AppConfig.swift              настройки из переменных окружения
 ├── routes.swift                 маршруты
-├── controllers/                 Currencies-, Rates-, Timeseries-, HealthController   (шаг 2)
+├── controllers/                 Currencies-, Rates-, Timeseries-, HealthController
 ├── services/                    UpstreamRatesSource + FrankfurterSource, RatesStore,
 │                                RatesSyncService, SyncSchedule, SyncScheduler,
-│                                RatesService (шаг 2)
-├── models/                      CurrencyModel, SyncRun (Fluent), DailyRates
+│                                RatesService
+├── models/                      CurrencyModel, SyncRun (Fluent), DailyRates, ответы API
 ├── migrations/                  CreateCurrencies, CreateRates, CreateSyncRuns
-└── utils/                       RateDate, TimeOfDay; HTTPCachingMiddleware (шаг 2)
+└── utils/                       RateDate, TimeOfDay, Decimal-округление, параметры запроса,
+                                 APIError + APIErrorMiddleware, HTTPCachingMiddleware
 tests/server/                    тесты сервера
 tests/fixtures/cross-rates.json  общие тест-векторы для сервера и клиента
 ```
@@ -319,6 +323,11 @@ erDiagram
 3. **Повторы:** если последняя дата у источника ещё не сегодняшняя — повтор каждые 30 минут до 19:00.
    Если курсов так и нет, значит праздник, и следующая попытка будет в следующий рабочий день.
 4. Запись идемпотентна (upsert по `(date, currency)`), в одной транзакции на синхронизацию.
+5. **Проверка данных источника** до записи: даты внутри запрошенного диапазона, коды из 3 заглавных
+   букв, курсы > 0, нет пустых дней. Один плохой день отклоняет весь пакет — в базу не пишется ничего,
+   попытка записывается в `sync_runs` как `failed` с текстом ошибки, `/health` показывает `degraded`.
+   Ответ, который не разбирается как JSON, обрабатывается так же. `5xx`, `429` и сетевые ошибки
+   источника повторяются до 3 раз с паузой, `404` означает «за эти дни ещё ничего не опубликовано».
 
 Планировщик — свой `SyncScheduler`: цикл в `Task` с `Task.sleep(until:)` до следующего запуска,
 запускается и останавливается вместе с приложением (`LifecycleHandler`). Часы (`Clock`) и источник
@@ -572,6 +581,8 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 | | синхронизация: бэкфилл, догрузка, повторы, праздники | заглушка `UpstreamRatesSource`, SQLite в памяти |
 | | расписание: будни, 16:15 Berlin, переход на летнее время | внедрённые часы |
 | | эндпоинты: ответы, ошибки, `ETag` / `304`, `Cache-Control` | VaporTesting, SQLite в памяти |
+| | сбои источника: мусор вместо JSON, неправдоподобные курсы, `5xx` с повторами, `404` | заглушка HTTP-клиента Vapor |
+| | цикл планировщика: выходные через переход на летнее время, пасхальные праздники | подменённые часы и `sleep` |
 | `tests/ios` | кросс-курсы | те же общие векторы |
 | | `ServerRatesAPI`: URL, `If-None-Match`, `304`, ошибки, разбор строк в `Decimal` | мок `HTTPClient` |
 | | модели экранов: кэш → сеть, офлайн, срок годности, период истории | мок `RatesAPI` |
@@ -582,15 +593,16 @@ iOS-клиент собирается в Xcode, в Docker он не входит
 ## 10. Текущее состояние и план
 
 **Сейчас:**
-- Сервер: хранилище SQLite, синхронизация с бэкфиллом за год и догрузкой пропусков, планировщик —
-  готово и покрыто тестами (шаг 1). REST-эндпоинтов ещё нет.
+- Сервер: хранилище, синхронизация с бэкфиллом и догрузкой, планировщик (шаг 1), REST API
+  `/currencies`, `/rates`, `/timeseries`, `/health` с ETag/304 и Cache-Control, единый формат ошибок
+  (шаг 2) — готово, 52 теста.
 - iOS-клиент временно ходит во Frankfurter напрямую через `FrankfurterClient` и кэширует
   последний ответ без `ETag`.
 
 **План:**
 
 1. ~~Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.~~ Готово.
-2. Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.
+2. ~~Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.~~ Готово.
 3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`.
 4. Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.
 5. Клиент: экран истории курса на Swift Charts.

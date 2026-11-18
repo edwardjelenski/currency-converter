@@ -191,3 +191,42 @@ project-root/:
 
 **Коммиты:** `7ddf81a` Add Vapor server with SQLite storage and scheduled rates sync ·
 `1bc83ab` Add server tests for sync, schedule and dates · Document server sync step and /health
+
+---
+
+## 6. 2026-11-18 20:44
+
+**Запрос:**
+
+```text
+/currencies /rates /timeseries /health + HTTPCachingMiddleware, ошибки в едином формате как в architecture.md
+
+тесты в tests/server на VaporTesting, sqlite в памяти: ответы эндпоинтов, 400 на кривые параметры, ETag/304, Cache-Control, синк (бэкфилл, праздники когда ECB не публикует, upstream упал или отдал мусор - данные не затираются), расписание с подменой часов включая переход на летнее время. после тестов проверь курлами вживую, с If-None-Match тоже
+```
+
+*(Сообщение начиналось с `/currencies` — в приложении это попыталось сработать как slash-команда, её нет; агент воспринял текст как обычный запрос.)*
+
+**Что сделано:**
+- REST API: `RatesService` (точные курсы к EUR, кросс-курсы в `Decimal` с округлением до 6 значащих цифр,
+  откат на предыдущий день публикации, пропуск дней без базовой валюты), контроллеры `/currencies`,
+  `/rates`, `/timeseries`, `/health`
+- Единый формат ошибок `APIErrorMiddleware` (вместо стандартного Vapor), коды `invalid_parameter`,
+  `unknown_currency`, `no_data`, `not_ready`, `not_found`; ошибки `no-store`
+- `HTTPCachingMiddleware`: сильный ETag из SHA-256 тела, `304` на `If-None-Match` (список, `W/`, `*`);
+  `Cache-Control` по маршруту; JSON с отсортированными ключами, чтобы ETag был стабильным
+- Синк: проверка данных источника до записи (один плохой день отклоняет пакет), `FrankfurterSource`
+  отбрасывает только дни до начала диапазона; планировщик принимает функцию `sleep` для тестов
+- 52 теста (VaporTesting, SQLite в памяти): эндпоинты, 400/404/503, ETag/304, Cache-Control, мусор и сбои
+  источника через заглушку HTTP-клиента, цикл планировщика на подменённых часах (оба перехода
+  на летнее время, Пасха), Рождество при догрузке
+- Проверка вживую `curl`: `/health`, `/currencies` (30 валют, без BGN, с EUR), `/rates` → ETag → `304`
+  (в т.ч. с `W/`), устаревший ETag → `200`, `/rates?base=USD` совпал с тестами, воскресенье → пятница,
+  `/timeseries` + `304`, год USD→JPY = 256 дней, 9 ошибочных запросов в едином формате
+- README: раздел REST API с живыми примерами; architecture: `/health`, проверка данных источника, статус плана
+
+**Файлы:** `Package.swift`, `Package.resolved`, `src/server/App/**`, `tests/server/**`, `README.md`,
+`docs/architecture.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `79f303e` Add REST API: /currencies, /rates, /timeseries, /health ·
+`9e23776` Reject implausible upstream data and make the scheduler clock injectable ·
+`863589f` Test endpoints, HTTP caching, upstream failures and schedule · Document REST API step
