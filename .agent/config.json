@@ -36,7 +36,8 @@
         "control: attach / launch / detach": "show the app in the simulator panel",
         "control: screenshot": "screens for verification and docs/screenshots",
         "control: tap (incl. long press)": "navigation, period switching, context menu",
-        "control: touch_path / swipe": "pull to refresh"
+        "control: touch_path / swipe": "pull to refresh",
+        "control: press_key / text": "type into the amount field"
       }
     },
     "cli": {
@@ -44,7 +45,7 @@
       "gh": "auth status, repo create, gitignore template, package release lookups via gh api",
       "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
       "xcodebuild": "build the app and run iOS tests on the existing simulator",
-      "xcrun simctl": "list, boot, uninstall/launch/terminate the app, shutdown; 'spawn … log show' to read the app's os_log network lines",
+      "xcrun simctl": "list, boot, uninstall/launch/terminate the app, shutdown; 'spawn … log show' for the app's os_log lines; 'get_app_container' to read saved preferences",
       "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server (also as the local server for simulator checks)",
       "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304; Docker Hub tag lookup; healthcheck command",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
@@ -55,7 +56,8 @@
       "ruby": "parse docker-compose.yml as YAML (no Docker available)",
       "shellcheck": "lint scripts/verify-docker.sh",
       "kill": "send SIGTERM to imitate docker stop",
-      "docker": "NOT available on this machine (not installed); scripts/verify-docker.sh is ready for when it is"
+      "docker": "NOT available on this machine (not installed); scripts/verify-docker.sh is ready for when it is",
+      "plutil": "read Info.plist of the built app and the app's preferences plist in the simulator"
     },
     "frameworks_for_tests": {
       "Swift Testing": "all iOS and server tests",
