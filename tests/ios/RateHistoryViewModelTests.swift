@@ -133,4 +133,39 @@ struct RateHistoryViewModelTests {
         #expect(model.format(rate: Decimal(string: "0.911743")!) == "0.911743")
         #expect(model.format(rate: Decimal(string: "159.418")!) == "159.418")
     }
+
+    @Test func reopeningTheScreenOfflineShowsWhatWasLoaded() async {
+        // One repository per app session, a new view model per opened screen.
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let repository = RateHistoryRepository(api: api)
+        let first = RateHistoryViewModel(base: "USD", target: "EUR", period: .month, repository: repository, locale: Locale(identifier: "en_US"))
+        await first.load()
+
+        await api.setHistory(.failure(URLError(.notConnectedToInternet)))
+        let reopened = RateHistoryViewModel(base: "USD", target: "EUR", period: .month, repository: repository, locale: Locale(identifier: "en_US"))
+        await reopened.load()
+
+        #expect(reopened.content == .chart(month))
+        #expect(reopened.staleNotice != nil)
+        #expect(reopened.loadedAt != nil)
+    }
+
+    @Test func otherPeriodOfflineIsNotServedFromMemory() async {
+        let api = MockRatesAPI()
+        await api.setHistory(.success(month))
+        let repository = RateHistoryRepository(api: api)
+        let model = RateHistoryViewModel(base: "USD", target: "EUR", period: .month, repository: repository, locale: Locale(identifier: "en_US"))
+        await model.load()
+
+        await api.setHistory(.failure(URLError(.notConnectedToInternet)))
+        model.period = .year
+        await model.load()
+
+        guard case let .failed(failure) = model.content else {
+            Issue.record("Expected an offline error for a period never loaded, got \(model.content)")
+            return
+        }
+        #expect(failure.isOffline)
+    }
 }

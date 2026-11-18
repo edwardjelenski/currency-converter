@@ -98,4 +98,55 @@ struct ServerRatesAPITests {
         #expect(ServerRatesAPI.maxAge(fromCacheControl: nil) == nil)
         #expect(ServerRatesAPI.maxAge(fromCacheControl: "public") == nil)
     }
+
+    // MARK: Added with the shared vectors
+
+    @Test func asksForJSON() async throws {
+        let http = MockHTTPClient(status: 200, body: ratesBody)
+        _ = try await ServerRatesAPI(baseURL: baseURL, http: http).latestRates(base: "EUR", ifNoneMatch: nil)
+        #expect(http.lastRequest?.value(forHTTPHeaderField: "Accept") == "application/json")
+    }
+
+    @Test func connectionFailureIsPassedThrough() async {
+        let http = MockHTTPClient(status: 0, failure: URLError(.cannotConnectToHost))
+        await #expect(throws: URLError(.cannotConnectToHost)) {
+            try await ServerRatesAPI(baseURL: baseURL, http: http).latestRates(base: "EUR", ifNoneMatch: "\"v1\"")
+        }
+    }
+
+    @Test(arguments: ["<html>Bad Gateway</html>", "", #"{"rates":"nope"}"#])
+    func okWithGarbageBodyIsADecodingError(body: String) async {
+        let http = MockHTTPClient(status: 200, body: body)
+        await #expect(throws: DecodingError.self) {
+            try await ServerRatesAPI(baseURL: baseURL, http: http).latestRates(base: "EUR", ifNoneMatch: nil)
+        }
+    }
+
+    @Test func ratesKeepMoreDigitsThanDoubleCan() async throws {
+        // 26 significant digits: a Double would keep ~16 of them.
+        let text = "0.004763512345678901234567891"
+        let http = MockHTTPClient(status: 200, body: #"{"base":"EUR","date":"2026-11-18","rates":{"GBP":"\#(text)"}}"#)
+
+        guard case let .modified(rates, _, _) = try await ServerRatesAPI(baseURL: baseURL, http: http)
+            .latestRates(base: "EUR", ifNoneMatch: nil) else {
+            Issue.record("Expected .modified")
+            return
+        }
+        #expect(rates.rates["GBP"]?.description == text)
+        #expect(rates.rates["GBP"] != Decimal(Double(text)!), "Going through Double would lose digits")
+    }
+
+    @Test func historyConnectionFailureIsPassedThrough() async {
+        let http = MockHTTPClient(status: 0, failure: URLError(.notConnectedToInternet))
+        await #expect(throws: URLError(.notConnectedToInternet)) {
+            try await ServerRatesAPI(baseURL: baseURL, http: http).history(base: "USD", target: "EUR", start: .now, end: .now)
+        }
+    }
+
+    @Test func historyServerNotReadyIsTyped() async {
+        let http = MockHTTPClient(status: 503, body: #"{"error":{"code":"not_ready","message":"Rates are still being loaded."}}"#)
+        await #expect(throws: RatesAPIError.server(status: 503, code: "not_ready", message: "Rates are still being loaded.")) {
+            try await ServerRatesAPI(baseURL: baseURL, http: http).history(base: "USD", target: "EUR", start: .now, end: .now)
+        }
+    }
 }

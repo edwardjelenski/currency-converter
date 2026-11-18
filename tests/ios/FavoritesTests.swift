@@ -146,4 +146,42 @@ struct FavoritesTests {
         #expect(relaunched.sourceCode == "EUR")
         #expect(relaunched.targetCode == "USD")
     }
+
+    // MARK: With the rates API
+
+    @Test func favoritesFollowNewRatesAfterRefresh() async {
+        let api = MockRatesAPI(.ok(.fixture, etag: "\"v1\"", maxAge: 3600))
+        let model = ConverterViewModel(
+            repository: RatesRepository(api: api, cache: makeTemporaryCache()),
+            defaults: makeIsolatedDefaults(),
+            locale: Locale(identifier: "en_US")
+        )
+        await model.load()
+        model.amountText = "10"
+        #expect(model.favoriteConversions.first { $0.id == "EUR" }?.amount == 5) // 1 EUR = 2 USD
+
+        await api.setReply(.ok(.nextDay, etag: "\"v2\"", maxAge: 3600))           // 1 EUR = 2.5 USD
+        await model.refresh()
+
+        #expect(model.favoriteConversions.first { $0.id == "EUR" }?.amount == 4)
+        #expect(model.favoriteConversions.first { $0.id == "JPY" }?.amount == 800)
+    }
+
+    @Test func unparsableAmountGivesNoFavoriteAmounts() {
+        let model = makeModel()
+        model.amountText = "12abc"
+        #expect(model.favoriteConversions.allSatisfy { $0.amount == nil })
+        #expect(model.favoriteConversions.count == 4)
+    }
+
+    @Test func noRatesYetGivesNoFavoriteAmounts() async {
+        let model = ConverterViewModel(
+            repository: RatesRepository(api: MockRatesAPI(.failure(URLError(.cannotConnectToHost))), cache: makeTemporaryCache()),
+            defaults: makeIsolatedDefaults(),
+            locale: Locale(identifier: "en_US")
+        )
+        await model.load()
+        #expect(model.favoriteConversions.map(\.id) == ["EUR", "GBP", "JPY", "CHF"])
+        #expect(model.favoriteConversions.allSatisfy { $0.amount == nil })
+    }
 }

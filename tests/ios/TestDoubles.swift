@@ -52,17 +52,21 @@ final class MockHTTPClient: HTTPClient, @unchecked Sendable {
     let status: Int
     let headers: [String: String]
     let body: String
+    /// Thrown instead of answering, like a connection failure.
+    let failure: URLError?
 
-    init(status: Int, headers: [String: String] = [:], body: String = "") {
+    init(status: Int, headers: [String: String] = [:], body: String = "", failure: URLError? = nil) {
         self.status = status
         self.headers = headers
         self.body = body
+        self.failure = failure
     }
 
     var lastRequest: URLRequest? { lock.withLock { requests.last } }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { requests.append(request) }
+        if let failure { throw failure }
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
         return (Data(body.utf8), response)
     }
