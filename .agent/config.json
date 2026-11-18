@@ -1,21 +1,54 @@
 {
+  "updated_at": "2026-11-18",
   "agent": "Claude Code",
-  "client": "Claude desktop app (Code tab)",
+  "client": "Claude desktop app, Code tab",
   "model": "claude-opus-5-5",
+  "model_name": "Claude Opus 5.5",
   "permission_mode": "auto",
-  "tools": {
-    "builtin": ["Bash", "Read", "Write", "Edit", "ToolSearch", "SendUserFile"],
-    "mcp": {
-      "xcode": ["XcodeOpenWorkspace", "XcodeCloseWorkspace", "RenderPreview"]
+  "subagents": [],
+  "tools_used": {
+    "builtin": {
+      "Bash": "shell commands: git, gh, xcodegen, xcodebuild, scripts",
+      "Read": "viewing rendered preview PNGs",
+      "Write": "creating and rewriting files",
+      "Edit": "point edits in files",
+      "ToolSearch": "loading MCP tool schemas on demand",
+      "SendUserFile": "sending screenshots to the user"
     },
-    "cli": ["git", "gh", "xcodegen", "xcodebuild", "xcrun simctl", "swift", "curl"]
+    "mcp": {
+      "xcode": {
+        "XcodeOpenWorkspace": "open the generated .xcodeproj",
+        "RenderPreview": "render #Preview to PNG for UI checks and docs/screenshots",
+        "XcodeCloseWorkspace": "close the project before moving it to src/ios"
+      },
+      "ccd_turn": {
+        "update_plan": "task list shown in the desktop app",
+        "wrap_up": "end-of-turn summary in the desktop app"
+      }
+    },
+    "cli": {
+      "git": "commits and push to main",
+      "gh": "auth status, repo create, gitignore template via gh api",
+      "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
+      "xcodebuild": "build and run tests",
+      "xcrun simctl": "list and shut down simulators",
+      "swift": "toolchain version, SwiftPM package layout check",
+      "curl": "inspect Frankfurter API responses",
+      "python3": "multi-line source edits during refactoring",
+      "sips": "resize screenshots"
+    }
   },
-  "user_instructions": [
-    "Personal projects: commit straight to main and push, no PRs or feature branches",
-    "SwiftUI UI checks: render #Preview via Xcode MCP instead of running the app",
-    "iOS simulators: reuse an existing free simulator, never create new ones, shut down after use"
-  ],
+  "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused, never created by the agent",
+  "instructions": {
+    "project": "CLAUDE.md: log every request in .agent/prompt-log.md, every agent mistake in .agent/errors.md, keep this file in sync",
+    "user_global": [
+      "Personal projects: commit straight to main and push, no PRs or feature branches",
+      "SwiftUI UI checks: render #Preview via Xcode MCP instead of running the app",
+      "iOS simulators: reuse an existing free simulator, never create new ones, shut down after use"
+    ]
+  },
   "environment": {
+    "macos": "Darwin 27.0",
     "xcode": "27.0",
     "swift": "6.4",
     "xcodegen": "2.46.0"
