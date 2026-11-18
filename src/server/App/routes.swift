@@ -1,5 +1,9 @@
 import Vapor
 
-/// REST endpoints. `/currencies`, `/rates`, `/timeseries` and `/health`
-/// come in the next step (see docs/architecture.md).
-func routes(_ app: Application) throws {}
+/// REST endpoints, see docs/architecture.md section 3.
+func routes(_ app: Application) throws {
+    try app.register(collection: CurrenciesController())
+    try app.register(collection: RatesController())
+    try app.register(collection: TimeseriesController())
+    try app.register(collection: HealthController())
+}

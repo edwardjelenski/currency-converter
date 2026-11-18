@@ -15,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent.git", from: "4.13.0"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.80.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -24,6 +25,7 @@ let package = Package(
                 .product(name: "Fluent", package: "fluent"),
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "Crypto", package: "swift-crypto"),
             ],
             path: "src/server/App",
             swiftSettings: swiftSettings
@@ -32,6 +34,7 @@ let package = Package(
             name: "AppTests",
             dependencies: [
                 .target(name: "App"),
+                .product(name: "VaporTesting", package: "vapor"),
             ],
             path: "tests/server",
             swiftSettings: swiftSettings
