@@ -332,3 +332,33 @@ CurrencyConverterApp.swift, preview/PreviewData.swift}`, `tests/ios/*`, `docs/**
 
 **Коммиты:** `46b85f3` Add rate history screen with Swift Charts · `13040e7` Test rate history model, API and screen states ·
 Document the rate history screen
+
+---
+
+## 10. 2026-11-18 21:43
+
+**Запрос:**
+
+```text
+на главном хочу кроме основной пары список избранных валют с пересчетом той же суммы. добавлять из пикера, удалять свайпом, порядок драгом. в пикере сверху секция недавних. выбор валют, избранное и последнюю сумму сохраняй между запусками
+```
+
+**Что сделано:**
+- Главный экран переведён на `List`; «Favorites» заменяет полный список «Other currencies»: сумма в каждой
+  избранной валюте, тап — сделать целевой, контекстное меню (история, порядок, удаление), пустое состояние
+- Добавление из пикера (режим с галочками и «Done»), удаление свайпом, порядок — перетаскиванием в режиме Edit
+- Пикер: секция «Recent» (последние 5), зафиксирована на время показа
+- `PreferencesStore` (UserDefaults): сумма, пара, избранное с порядком, недавние; ключи пары и суммы прежние
+- 72 iOS-теста, в т.ч. сверка перестановки с эталонным `Array.move` и восстановление после «перезапуска»
+- Превью (главный, пустое избранное, пикер) и симулятор с сервером: свайп-удаление, перестановка в Edit,
+  выбор целевой валюты, добавление из пикера, «Recent», перезапуск — сумма, пара, порядок избранного и
+  недавние на месте (проверено и по plist настроек в контейнере приложения)
+- По итогам проверки: галочки в пикере не обновлялись, «Recent» сдвигал строки во время выбора,
+  долгое нажатие открывает меню вместо перетаскивания — исправлено/учтено (errors.md #23–#25)
+
+**Файлы:** `src/ios/CurrencyConverter/{services/PreferencesStore.swift, components/converter/*, components/currency-picker/CurrencyPickerView.swift,
+preview/PreviewData.swift}`, `tests/ios/{FavoritesTests.swift, ConverterViewModelTests.swift}`, `docs/**`, `README.md`, `PROMPTS.md`,
+`REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `cff8ee4` Add favorites with the same amount converted, and recent currencies ·
+`690c14e` Test favorites, recents and persistence across launches · Document favorites and recents
