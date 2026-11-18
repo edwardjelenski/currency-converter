@@ -14,9 +14,10 @@ func configure(
     app.http.server.configuration.hostname = config.hostname
     app.http.server.configuration.port = config.port
 
-    // Middleware: our error format instead of Vapor's default, then ETag / 304.
+    // Middleware: access log with final status, our error format instead of Vapor's
+    // default, then ETag / 304.
     app.middleware = .init()
-    app.middleware.use(RouteLoggingMiddleware(logLevel: .info))
+    app.middleware.use(AccessLogMiddleware())
     app.middleware.use(APIErrorMiddleware())
     app.middleware.use(HTTPCachingMiddleware())
 
