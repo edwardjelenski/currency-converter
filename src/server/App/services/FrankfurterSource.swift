@@ -37,7 +37,8 @@ struct FrankfurterSource: UpstreamRatesSource {
     func rates(from start: RateDate, to end: RateDate) async throws -> [DailyRates] {
         guard let body = try await get("\(start)..\(end)?base=EUR") else { return [] }
         // Frankfurter snaps a start on a non-publication day back to the previous one; drop those.
-        return try Self.decodeTimeseries(body).filter { (start...end).contains($0.date) }
+        // Anything after `end` is kept on purpose: it is garbage and the sync's validation rejects it.
+        return try Self.decodeTimeseries(body).filter { $0.date >= start }
     }
 
     /// Decodes `{"base":"EUR","start_date":…,"rates":{"2026-11-18":{"USD":1.0968,…},…}}`.
@@ -74,6 +75,8 @@ struct FrankfurterSource: UpstreamRatesSource {
                 default:
                     throw SourceError.unexpectedStatus(response.status, path: path)
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch let error as SourceError {
                 guard case .serverError = error, attempt < maxAttempts else { throw error }
                 try await backOff(after: error, attempt: &attempt)

@@ -65,8 +65,10 @@ struct RatesSyncService: Sendable {
                 logger.info("Stored \(names.count) currencies")
             }
 
-            let newDays = try await upstream.rates(from: start, to: today)
-                .filter { latest == nil || $0.date > latest! }
+            let fetched = try await upstream.rates(from: start, to: today)
+            // Reject the whole batch before writing anything if the source sent garbage.
+            try Self.validate(fetched, requested: start...today)
+            let newDays = fetched.filter { latest == nil || $0.date > latest! }
             let written = try await db.transaction { tx in
                 let txStore = RatesStore(database: tx)
                 try await txStore.ensureCurrencies(Set(newDays.flatMap(\.rates.keys)))
@@ -100,11 +102,47 @@ struct RatesSyncService: Sendable {
         }
     }
 
+    /// What the source returned must look like ECB rates: dates inside the requested
+    /// range, 3-letter codes, positive values, no empty days.
+    static func validate(_ days: [DailyRates], requested range: ClosedRange<RateDate>) throws {
+        for day in days {
+            guard range.contains(day.date) else {
+                throw UpstreamDataError.dateOutOfRange(day.date, requested: range)
+            }
+            guard !day.rates.isEmpty else { throw UpstreamDataError.emptyDay(day.date) }
+            for (code, rate) in day.rates {
+                guard code.count == 3, code.allSatisfy({ $0.isASCII && $0.isUppercase }) else {
+                    throw UpstreamDataError.invalidCurrency(code, on: day.date)
+                }
+                guard rate > 0, !rate.isNaN else {
+                    throw UpstreamDataError.invalidRate(rate, currency: code, on: day.date)
+                }
+            }
+        }
+    }
+
     private func finish(_ run: SyncRun, status: SyncRun.Status, datesAdded: Int, latest: RateDate?, on db: any Database) async throws {
         run.status = status
         run.datesAdded = datesAdded
         run.latestRateDate = latest?.description
         run.finishedAt = now()
         try await run.update(on: db)
+    }
+}
+
+/// The upstream answered, but with data that can't be ECB rates.
+enum UpstreamDataError: Error, Equatable, CustomStringConvertible {
+    case dateOutOfRange(RateDate, requested: ClosedRange<RateDate>)
+    case emptyDay(RateDate)
+    case invalidCurrency(String, on: RateDate)
+    case invalidRate(Decimal, currency: String, on: RateDate)
+
+    var description: String {
+        switch self {
+        case let .dateOutOfRange(date, range): "Upstream returned \(date) outside the requested \(range.lowerBound)...\(range.upperBound)"
+        case let .emptyDay(date): "Upstream returned no rates for \(date)"
+        case let .invalidCurrency(code, date): "Upstream returned an invalid currency code '\(code)' on \(date)"
+        case let .invalidRate(rate, code, date): "Upstream returned an invalid rate \(rate) for \(code) on \(date)"
+        }
     }
 }
