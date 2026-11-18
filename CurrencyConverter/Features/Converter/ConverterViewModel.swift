@@ -60,21 +60,9 @@ final class ConverterViewModel {
     var source: Currency { Currency(code: sourceCode) }
     var target: Currency { Currency(code: targetCode) }
 
-    /// The typed amount, accepting both `.` and the locale's decimal separator
-    /// and ignoring grouping separators and spaces.
+    /// The typed amount, parsed in the user's locale. See `AmountParser`.
     var amount: Decimal? {
-        let decimalSeparator = locale.decimalSeparator ?? "."
-        let groupingSeparator = locale.groupingSeparator ?? ","
-        var text = amountText.filter { !$0.isWhitespace }
-        if groupingSeparator != decimalSeparator, groupingSeparator != "." {
-            text = text.replacingOccurrences(of: groupingSeparator, with: "")
-        }
-        text = text.replacingOccurrences(of: decimalSeparator, with: ".")
-        text = text.replacingOccurrences(of: ",", with: ".")
-        guard !text.isEmpty, let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) else {
-            return nil
-        }
-        return value
+        AmountParser.parse(amountText, locale: locale)
     }
 
     var convertedAmount: Decimal? {
