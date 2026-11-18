@@ -2,9 +2,11 @@ import SwiftUI
 
 @main
 struct CurrencyConverterApp: App {
+    @State private var model = ConverterViewModel(repository: .live)
+
     var body: some Scene {
         WindowGroup {
-            Text("Currency Converter")
+            ConverterView(model: model)
         }
     }
 }
