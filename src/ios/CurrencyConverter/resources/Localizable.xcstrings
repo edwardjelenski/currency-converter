@@ -1,0 +1,640 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@, change currency": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, выбрать другую валюту"
+          }
+        }
+      }
+    },
+    "0": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0"
+          }
+        }
+      }
+    },
+    "1 %@ =": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 %@ ="
+          }
+        }
+      }
+    },
+    "1 month": {
+      "comment": "History period, used in 'over 1 month'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 месяц"
+          }
+        }
+      }
+    },
+    "1 week": {
+      "comment": "History period, used in 'over 1 week'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 неделю"
+          }
+        }
+      }
+    },
+    "1 year": {
+      "comment": "History period, used in 'over 1 year'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 год"
+          }
+        }
+      }
+    },
+    "1M": {
+      "comment": "Period picker: one month",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1М"
+          }
+        }
+      }
+    },
+    "1W": {
+      "comment": "Period picker: one week",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1Н"
+          }
+        }
+      }
+    },
+    "1Y": {
+      "comment": "Period picker: one year",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1Г"
+          }
+        }
+      }
+    },
+    "3 months": {
+      "comment": "History period, used in 'over 3 months'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 месяца"
+          }
+        }
+      }
+    },
+    "3M": {
+      "comment": "Period picker: three months",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3М"
+          }
+        }
+      }
+    },
+    "Add Currencies": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить валюты"
+          }
+        }
+      }
+    },
+    "Add currencies to see the same amount in each of them.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавьте валюты, чтобы видеть ту же сумму в каждой из них."
+          }
+        }
+      }
+    },
+    "Add to Favorites": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить в избранное"
+          }
+        }
+      }
+    },
+    "All Currencies": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все валюты"
+          }
+        }
+      }
+    },
+    "Amount in %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сумма в %@"
+          }
+        }
+      }
+    },
+    "Can't reach the rates server. Check your connection and try again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся связаться с сервером курсов. Проверьте подключение и попробуйте ещё раз."
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
+          }
+        }
+      }
+    },
+    "Change": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменение"
+          }
+        }
+      }
+    },
+    "Converter": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Конвертер"
+          }
+        }
+      }
+    },
+    "Couldn't load history": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось загрузить историю"
+          }
+        }
+      }
+    },
+    "Couldn't update rates": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось обновить курсы"
+          }
+        }
+      }
+    },
+    "Currency or code": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Валюта или код"
+          }
+        }
+      }
+    },
+    "Date": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дата"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
+        }
+      }
+    },
+    "ECB reference rate · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курс ЕЦБ · %@"
+          }
+        }
+      }
+    },
+    "ECB reference rates. Published on working days only, so weekends and holidays have no points.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курсы ЕЦБ. Публикуются только в рабочие дни, поэтому у выходных и праздников нет точек."
+          }
+        }
+      }
+    },
+    "Edit": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить"
+          }
+        }
+      }
+    },
+    "Exchange rates couldn't be loaded.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось загрузить курсы валют."
+          }
+        }
+      }
+    },
+    "Favorites": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Избранное"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Максимум"
+          }
+        }
+      }
+    },
+    "History": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История"
+          }
+        }
+      }
+    },
+    "Loading history…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка истории…"
+          }
+        }
+      }
+    },
+    "Loading rates…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка курсов…"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Минимум"
+          }
+        }
+      }
+    },
+    "Makes it the currency you get": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Делает эту валюту целевой"
+          }
+        }
+      }
+    },
+    "No connection": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет соединения"
+          }
+        }
+      }
+    },
+    "No data for this period": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет данных за этот период"
+          }
+        }
+      }
+    },
+    "No favorites yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Избранного пока нет"
+          }
+        }
+      }
+    },
+    "No rate": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет курса"
+          }
+        }
+      }
+    },
+    "No rates yet": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курсов пока нет"
+          }
+        }
+      }
+    },
+    "Not enough data to draw %@ for %@. The ECB publishes rates on working days only.": {
+      "comment": "History empty state: fewer than two days of rates. First argument is a pair like 'USD → EUR', second a period like '1 week'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недостаточно данных, чтобы построить график %1$@ за %2$@. ЕЦБ публикует курсы только в рабочие дни."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Not enough data to draw %1$@ for %2$@. The ECB publishes rates on working days only."
+          }
+        }
+      }
+    },
+    "Period": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Период"
+          }
+        }
+      }
+    },
+    "Rate": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Курс"
+          }
+        }
+      }
+    },
+    "Rate history": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История курса"
+          }
+        }
+      }
+    },
+    "Recent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недавние"
+          }
+        }
+      }
+    },
+    "Remove from Favorites": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить из избранного"
+          }
+        }
+      }
+    },
+    "Reorder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить порядок"
+          }
+        }
+      }
+    },
+    "Selected": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрано"
+          }
+        }
+      }
+    },
+    "Showing rates last updated %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показаны курсы, обновлённые %@."
+          }
+        }
+      }
+    },
+    "Shows how the rate changed over time": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показывает, как менялся курс"
+          }
+        }
+      }
+    },
+    "Swap currencies": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поменять валюты местами"
+          }
+        }
+      }
+    },
+    "The server responded 304 to an unconditional request.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер ответил 304 на безусловный запрос."
+          }
+        }
+      }
+    },
+    "The server responded with status %lld.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер ответил с кодом %lld."
+          }
+        }
+      }
+    },
+    "The server sent an invalid %@ rate “%@”.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер прислал неверный курс %1$@: «%2$@»."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "The server sent an invalid %1$@ rate “%2$@”."
+          }
+        }
+      }
+    },
+    "There are no %@ rates for %@. The currency may not have been published by the ECB in this period.": {
+      "comment": "History empty state: no rates at all. First argument is a pair like 'USD → EUR', second a period like '1 month'",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет курсов %1$@ за %2$@. Возможно, ЕЦБ не публиковал эту валюту в этот период."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "There are no %1$@ rates for %2$@. The currency may not have been published by the ECB in this period."
+          }
+        }
+      }
+    },
+    "They get": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Получаете"
+          }
+        }
+      }
+    },
+    "Try Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
+          }
+        }
+      }
+    },
+    "You send": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отдаёте"
+          }
+        }
+      }
+    },
+    "over %@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "за %1$@ · %2$@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "over %1$@ · %2$@"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
