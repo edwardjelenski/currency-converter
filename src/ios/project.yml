@@ -68,6 +68,10 @@ targets:
       # Tests live outside the iOS folder, in <repo>/tests/ios.
       - path: ../../tests/ios
         name: CurrencyConverterTests
+      # Cross-rate vectors shared with the server tests, copied into the test bundle.
+      - path: ../../tests/fixtures
+        name: Fixtures
+        buildPhase: resources
     dependencies:
       - target: CurrencyConverter
     settings:

@@ -1,0 +1,164 @@
+{
+  "description": "Shared cross-rate vectors, run by both tests/server and tests/ios. Expected values were computed with Python's decimal module (38 digits, half-up rounding), not by hand.",
+  "rules": [
+    "rates are units of the currency per 1 EUR, exactly as the ECB published them on `date`",
+    "crossRates.rate is what /rates?base=<from> returns for <to>: the published value when from is EUR, otherwise rate(to)/rate(from) rounded half-up to 6 significant digits",
+    "same currency: rate 1 (the API leaves the base itself out of `rates`)",
+    "rate null: one of the currencies is unknown (the API answers 400 for an unknown base and omits an unknown target)",
+    "conversions are client-only: amount * rate(to)/rate(from) with no intermediate rounding, rounded half-up to fractionDigits"
+  ],
+  "date": "2026-11-18",
+  "rates": {
+    "USD": "1.0968",
+    "GBP": "0.8329",
+    "JPY": "174.85",
+    "CHF": "0.9243",
+    "CZK": "24.386",
+    "HUF": "368.4",
+    "IDR": "20020.71",
+    "ISK": "137",
+    "KRW": "1461.3",
+    "PLN": "4.4118",
+    "ZAR": "18.8897"
+  },
+  "crossRates": [
+    {
+      "from": "EUR",
+      "to": "USD",
+      "rate": "1.0968"
+    },
+    {
+      "from": "EUR",
+      "to": "IDR",
+      "rate": "20020.71"
+    },
+    {
+      "from": "USD",
+      "to": "EUR",
+      "rate": "0.911743"
+    },
+    {
+      "from": "USD",
+      "to": "GBP",
+      "rate": "0.759391"
+    },
+    {
+      "from": "USD",
+      "to": "JPY",
+      "rate": "159.418"
+    },
+    {
+      "from": "GBP",
+      "to": "USD",
+      "rate": "1.31684"
+    },
+    {
+      "from": "JPY",
+      "to": "GBP",
+      "rate": "0.00476351"
+    },
+    {
+      "from": "JPY",
+      "to": "IDR",
+      "rate": "114.502"
+    },
+    {
+      "from": "IDR",
+      "to": "JPY",
+      "rate": "0.00873346"
+    },
+    {
+      "from": "ISK",
+      "to": "HUF",
+      "rate": "2.68905"
+    },
+    {
+      "from": "KRW",
+      "to": "ZAR",
+      "rate": "0.0129266"
+    },
+    {
+      "from": "CHF",
+      "to": "CZK",
+      "rate": "26.3832"
+    },
+    {
+      "from": "PLN",
+      "to": "USD",
+      "rate": "0.248606"
+    },
+    {
+      "from": "USD",
+      "to": "USD",
+      "rate": "1"
+    },
+    {
+      "from": "USD",
+      "to": "XXX",
+      "rate": null
+    },
+    {
+      "from": "XXX",
+      "to": "USD",
+      "rate": null
+    }
+  ],
+  "conversions": [
+    {
+      "amount": "100",
+      "from": "USD",
+      "to": "EUR",
+      "fractionDigits": 2,
+      "result": "91.17"
+    },
+    {
+      "amount": "1234.5",
+      "from": "GBP",
+      "to": "JPY",
+      "fractionDigits": 0,
+      "result": "259158"
+    },
+    {
+      "amount": "2500000",
+      "from": "USD",
+      "to": "IDR",
+      "fractionDigits": 0,
+      "result": "45634368162"
+    },
+    {
+      "amount": "0.01",
+      "from": "USD",
+      "to": "KRW",
+      "fractionDigits": 2,
+      "result": "13.32"
+    },
+    {
+      "amount": "1",
+      "from": "IDR",
+      "to": "USD",
+      "fractionDigits": 6,
+      "result": "0.000055"
+    },
+    {
+      "amount": "99.99",
+      "from": "CHF",
+      "to": "PLN",
+      "fractionDigits": 2,
+      "result": "477.26"
+    },
+    {
+      "amount": "1000000",
+      "from": "ISK",
+      "to": "EUR",
+      "fractionDigits": 2,
+      "result": "7299.27"
+    },
+    {
+      "amount": "250",
+      "from": "USD",
+      "to": "GBP",
+      "fractionDigits": 2,
+      "result": "189.85"
+    }
+  ]
+}
