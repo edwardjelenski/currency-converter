@@ -4,6 +4,10 @@ import Foundation
 protocol RatesAPI: Sendable {
     /// `GET /rates?base=…`, conditional on `etag` when given.
     func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates>
+
+    /// `GET /timeseries?base=…&symbols=…&start=…&end=…` for one currency pair.
+    /// Throws `RatesAPIError.server(code: "no_data")` when there are no rates in the range.
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory
 }
 
 /// Result of a conditional GET.

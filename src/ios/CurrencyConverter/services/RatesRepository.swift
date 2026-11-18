@@ -67,7 +67,7 @@ struct RatesRepository: Sendable {
 extension RatesRepository {
     static func live() -> RatesRepository {
         RatesRepository(
-            api: ServerRatesAPI(baseURL: AppConfiguration.apiBaseURL, http: URLSessionHTTPClient()),
+            api: ServerRatesAPI.live(),
             cache: RatesCache()
         )
     }

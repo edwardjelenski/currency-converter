@@ -2,8 +2,10 @@ import SwiftUI
 
 struct ConverterView: View {
     @Bindable var model: ConverterViewModel
+    let history: RateHistoryRepository
 
     @State private var picking: PickerTarget?
+    @State private var path: [HistoryRoute] = []
     @FocusState private var amountFocused: Bool
 
     private enum PickerTarget: String, Identifiable {
@@ -12,7 +14,7 @@ struct ConverterView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if model.hasRates {
                     content
@@ -24,6 +26,9 @@ struct ConverterView: View {
             }
             .navigationTitle("Converter")
             .background(Theme.background)
+            .navigationDestination(for: HistoryRoute.self) { route in
+                RateHistoryScreen(route: route, repository: history)
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -105,20 +110,43 @@ struct ConverterView: View {
         .animation(.snappy, value: model.formattedResult)
     }
 
+    /// The pair's rate; tapping it opens the rate history. This is where people look at
+    /// "how much is it", so it is the natural door to "how has it changed".
     @ViewBuilder
     private var rateInfo: some View {
-        VStack(spacing: 4) {
-            if let rateDescription = model.rateDescription {
-                Text(rateDescription)
-                    .font(.subheadline.monospacedDigit())
+        if let rateDescription = model.rateDescription {
+            NavigationLink(value: HistoryRoute(base: model.sourceCode, target: model.targetCode)) {
+                HStack(spacing: 12) {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .frame(width: 36, height: 36)
+                        .background(.tint.opacity(0.12), in: .circle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rateDescription)
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                        if let published = model.rates?.publishedAt {
+                            Text("ECB reference rate · \(published.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Text("History")
+                        .font(.subheadline)
+                        .foregroundStyle(.tint)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(12)
+                .background(Theme.surface, in: .rect(cornerRadius: Theme.listCornerRadius))
+                .contentShape(.rect)
             }
-            if let published = model.rates?.publishedAt {
-                Text("ECB reference rate · \(published.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .buttonStyle(.plain)
+            .disabled(model.sourceCode == model.targetCode)
+            .accessibilityHint("Shows how the rate changed over time")
         }
-        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -141,6 +169,11 @@ struct ConverterView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Rate history", systemImage: "chart.xyaxis.line") {
+                                path.append(HistoryRoute(base: model.sourceCode, target: conversion.currency.code))
+                            }
+                        }
 
                         if conversion.id != conversions.last?.id {
                             Divider().padding(.leading, 56)
@@ -166,10 +199,10 @@ struct ConverterView: View {
 
 #if DEBUG
 #Preview("Converter") {
-    ConverterView(model: .preview())
+    ConverterView(model: .preview(), history: .preview())
 }
 
 #Preview("Offline, no cache") {
-    ConverterView(model: .preview(api: OfflineRatesAPI(), snapshot: nil))
+    ConverterView(model: .preview(api: OfflineRatesAPI(), snapshot: nil), history: .preview(api: OfflineRatesAPI()))
 }
 #endif

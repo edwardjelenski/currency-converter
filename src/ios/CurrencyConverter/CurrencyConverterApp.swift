@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct CurrencyConverterApp: App {
     @State private var model = ConverterViewModel(repository: .live())
+    private let history = RateHistoryRepository(api: ServerRatesAPI.live())
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -12,7 +13,7 @@ struct CurrencyConverterApp: App {
             if Self.isHostingUnitTests {
                 Color.clear
             } else {
-                ConverterView(model: model)
+                ConverterView(model: model, history: history)
             }
         }
         .onChange(of: scenePhase) { _, phase in

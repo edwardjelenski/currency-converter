@@ -6,6 +6,10 @@ struct ServerRatesAPI: RatesAPI {
     let baseURL: URL
     let http: any HTTPClient
 
+    static func live() -> ServerRatesAPI {
+        ServerRatesAPI(baseURL: AppConfiguration.apiBaseURL, http: URLSessionHTTPClient())
+    }
+
     private static let logger = Logger(subsystem: "com.eduardyelenskiy.currencyconverter", category: "network")
 
     func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
@@ -36,11 +40,40 @@ struct ServerRatesAPI: RatesAPI {
             guard etag != nil else { throw RatesAPIError.unexpectedNotModified }
             return .notModified(maxAge: maxAge)
         default:
-            if let error = try? JSONDecoder().decode(ErrorDTO.self, from: data) {
-                throw RatesAPIError.server(status: response.statusCode, code: error.error.code, message: error.error.message)
-            }
-            throw RatesAPIError.unexpectedStatus(response.statusCode)
+            throw Self.error(status: response.statusCode, body: data)
         }
+    }
+
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
+        var components = URLComponents(url: baseURL.appending(path: "timeseries"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "base", value: base),
+            URLQueryItem(name: "symbols", value: target),
+            URLQueryItem(name: "start", value: RateDay.string(from: start)),
+            URLQueryItem(name: "end", value: RateDay.string(from: end)),
+        ]
+        var request = URLRequest(url: components.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let path = "/timeseries?\(components.percentEncodedQuery ?? "")"
+        let (data, response): (Data, HTTPURLResponse)
+        do {
+            (data, response) = try await http.send(request)
+        } catch {
+            Self.logger.error("GET \(path, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
+        Self.logger.notice("GET \(path, privacy: .public) → \(response.statusCode, privacy: .public)")
+
+        guard response.statusCode == 200 else { throw Self.error(status: response.statusCode, body: data) }
+        return try JSONDecoder().decode(TimeseriesDTO.self, from: data).history(target: target)
+    }
+
+    private static func error(status: Int, body: Data) -> RatesAPIError {
+        if let error = try? JSONDecoder().decode(ErrorDTO.self, from: body) {
+            return .server(status: status, code: error.error.code, message: error.error.message)
+        }
+        return .unexpectedStatus(status)
     }
 
     /// `max-age` in seconds from a `Cache-Control` header; `0` for `no-store` / `no-cache`.
@@ -80,6 +113,27 @@ struct RatesDTO: Decodable {
             decimals[code] = value
         }
         return ExchangeRates(base: base, date: date, rates: decimals)
+    }
+}
+
+/// `{"base":"USD","start":…,"end":…,"rates":{"2026-11-17":{"GBP":"0.759038"},…}}`
+struct TimeseriesDTO: Decodable {
+    let base: String
+    let rates: [String: [String: String]]
+
+    func history(target: String) throws -> RateHistory {
+        var points: [RatePoint] = []
+        for (day, values) in rates {
+            guard let text = values[target] else { continue }
+            guard let date = RateDay.date(from: day) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Invalid date '\(day)'"))
+            }
+            guard let rate = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")), rate > 0 else {
+                throw RatesAPIError.invalidRate(currency: target, value: text)
+            }
+            points.append(RatePoint(day: day, date: date, rate: rate))
+        }
+        return RateHistory(base: base, target: target, points: points.sorted { $0.day < $1.day })
     }
 }
 

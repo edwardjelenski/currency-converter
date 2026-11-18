@@ -23,12 +23,60 @@ struct PreviewRatesAPI: RatesAPI {
     func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
         etag == nil ? .modified(rates, etag: "\"preview\"", maxAge: 3600) : .notModified(maxAge: 3600)
     }
+
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
+        RateHistory.sample(base: base, target: target, from: start, to: end)
+    }
 }
 
 /// The server is unreachable.
 struct OfflineRatesAPI: RatesAPI {
     func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
         throw URLError(.cannotConnectToHost)
+    }
+
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
+        throw URLError(.cannotConnectToHost)
+    }
+}
+
+extension RateHistory {
+    /// A plausible, deterministic USD→EUR-like curve over working days.
+    static func sample(base: String = "USD", target: String = "EUR", from start: Date, to end: Date) -> RateHistory {
+        let calendar = Calendar.current
+        var points: [RatePoint] = []
+        var day = calendar.startOfDay(for: start)
+        var index = 0
+        while day <= end {
+            if !calendar.isDateInWeekend(day) {
+                // Slow drift plus a wave, in exact decimals.
+                let wave = Decimal(sin(Double(index) / 6) * 120 + Double(index) * 1.5).rounded(0)
+                let rate = Decimal(string: "0.9050")! + wave / 100_000
+                points.append(RatePoint(day: RateDay.string(from: day), date: day, rate: rate))
+                index += 1
+            }
+            day = calendar.date(byAdding: .day, value: 1, to: day)!
+        }
+        return RateHistory(base: base, target: target, points: points)
+    }
+
+    static func sample(period: HistoryPeriod, endingOn end: Date = .now) -> RateHistory {
+        sample(from: period.start(endingOn: end), to: end)
+    }
+}
+
+private extension Decimal {
+    func rounded(_ scale: Int) -> Decimal {
+        var value = self
+        var result = Decimal()
+        NSDecimalRound(&result, &value, scale, .plain)
+        return result
+    }
+}
+
+extension RateHistoryRepository {
+    static func preview(api: any RatesAPI = PreviewRatesAPI()) -> RateHistoryRepository {
+        RateHistoryRepository(api: api)
     }
 }
 
