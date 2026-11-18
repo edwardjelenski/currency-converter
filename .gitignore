@@ -72,3 +72,12 @@ fastlane/test_output
 # Local build output
 DerivedData/
 build/
+
+# Swift Package Manager (server)
+.swiftpm/
+
+# Local server database
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
