@@ -262,3 +262,39 @@ multistage Dockerfile + docker-compose.yml. проверь что docker compose
 `docs/architecture.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
 
 **Коммиты:** Add multistage Dockerfile and Compose setup (not yet run in Docker)
+
+---
+
+## 8. 2026-11-18 21:04
+
+**Запрос:**
+
+```text
+переводим приложение на наш сервер. HTTPClient + ServerRatesAPI, кэш с ETag и сроком годности, FrankfurterClient удалить совсем чтоб во внешние апи приложение больше не ходило  проверь в симуляторе с сервером из компоуза: холодный старт, повторный запуск без сети (сервер погасить), рефреш с 304
+```
+
+**Что сделано:**
+- Docker по-прежнему не установлен → сервер для проверки запущен локально (`swift run App serve`,
+  тот же код и та же база), а не из Compose — сказал об этом сразу
+- iOS: `HTTPClient` + `URLSessionHTTPClient` (без `URLCache`), `RatesAPI` + `ServerRatesAPI` (условный GET,
+  ETag, `max-age`, `304`, формат ошибок сервера, курсы строками → `Decimal`), `RatesCache` v2 (ETag, сроки),
+  `RatesRepository` (свежий кэш — без запроса, истёк/pull-to-refresh — `If-None-Match`), модель экрана
+  (`load` / `refresh` / `refreshIfNeeded` при возврате из фона), адрес сервера из `API_BASE_URL` → Info.plist,
+  ATS только для локальных адресов; `FrankfurterClient` и `RatesProviding` удалены, в приложении
+  остался один адрес — `http://127.0.0.1:8080`
+- Сервер: `AccessLogMiddleware` пишет статус ответа (`→ 304 (If-None-Match)`)
+- 41 iOS-тест (мок `HTTPClient`, мок `RatesAPI`, тестовые часы); серверные 52 — без изменений, проходят
+- Симулятор (существующий iPhone 17 Pro, выключен после проверки):
+  1. холодный старт (приложение удалено) → `GET /rates?base=EUR → 200 (If-None-Match: none)`, курсы на экране
+  2. сервер погашен, приложение перезапущено → курсы из кэша, запросов нет (кэш свежий);
+     pull-to-refresh → «Could not connect to the server», плашка «Couldn't update rates»
+  3. сервер поднят, pull-to-refresh → `304` и в логе приложения, и в логе сервера, плашка исчезла
+- Хост unit-тестов больше не запускает загрузку курсов (находка из логов симулятора)
+- Скриншоты из симулятора в `docs/screenshots/`, README и architecture обновлены
+
+**Файлы:** `src/ios/**`, `tests/ios/**`, `src/server/App/utils/AccessLogMiddleware.swift`,
+`src/server/App/configure.swift`, `.gitignore`, `README.md`, `docs/**`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `6f58d7b` Log every request with its final status on the server ·
+`daee635` Switch the iOS app to our server; remove the direct Frankfurter client ·
+`876fef4` Test the server API client, ETag cache and refresh policy · Document the server-backed iOS client

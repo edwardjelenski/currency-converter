@@ -31,15 +31,20 @@
         "get_page_text": "read render results",
         "javascript_tool": "inspect the page while checking diagrams",
         "computer (screenshot, scroll)": "visual check of rendered mermaid diagrams"
+      },
+      "Claude_Code_iOS_Simulator": {
+        "control: attach / launch / detach": "show the app in the simulator panel",
+        "control: screenshot": "screens for verification and docs/screenshots",
+        "control: touch_path / swipe": "pull to refresh"
       }
     },
     "cli": {
       "git": "commits and push to main",
       "gh": "auth status, repo create, gitignore template, package release lookups via gh api",
       "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
-      "xcodebuild": "build and run tests",
-      "xcrun simctl": "list and shut down simulators",
-      "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server",
+      "xcodebuild": "build the app and run iOS tests on the existing simulator",
+      "xcrun simctl": "list, boot, uninstall/launch/terminate the app, shutdown; 'spawn … log show' to read the app's os_log network lines",
+      "swift": "toolchain version, SwiftPM layout check, package resolve / build / test / run for the server (also as the local server for simulator checks)",
       "curl": "inspect Frankfurter responses and edge cases; live checks of the server API incl. If-None-Match / 304; Docker Hub tag lookup; healthcheck command",
       "python3": "multi-line source edits, extracting mermaid blocks, local http.server for checks",
       "sips": "resize screenshots",
@@ -56,7 +61,7 @@
       "VaporTesting": "in-process HTTP tests of the server endpoints"
     }
   },
-  "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused, never created by the agent",
+  "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused for tests and manual checks, never created by the agent, shut down afterwards",
   "instructions": {
     "project": "CLAUDE.md: log every request in .agent/prompt-log.md, every agent mistake in .agent/errors.md, keep this file in sync",
     "user_global": [

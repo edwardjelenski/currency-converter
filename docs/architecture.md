@@ -364,9 +364,8 @@ Swift Testing. Без сторонних зависимостей.
   }
 
   protocol RatesAPI: Sendable {
-      func currencies(ifNoneMatch etag: String?) async throws -> Conditional<[CurrencyDTO]>
-      func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<RatesDTO>
-      func timeseries(base: String, symbols: [String], start: Date, end: Date) async throws -> TimeseriesDTO
+      func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates>
+      // шаг 5: func timeseries(base:symbols:start:end:) для экрана истории
   }
 
   enum Conditional<Value: Sendable>: Sendable {
@@ -381,21 +380,34 @@ Swift Testing. Без сторонних зависимостей.
   `Decimal.FormatStyle.Currency`. `Double` встречается в одном месте: координаты точек на графике
   Swift Charts, потому что Charts строит оси только по `Double`. Подписи на графике
   форматируются из исходных `Decimal`.
-- **Офлайн-кэш последнего ответа** — `RatesCache` (`actor`, JSON в `Caches/`): последний `/rates?base=EUR`
-  и `/currencies` вместе с `ETag`, временем загрузки и сроком годности. История курса кэшируется
-  только в памяти: без сети экран истории показывает понятную ошибку, конвертер продолжает работать.
-- **Адрес сервера** — build setting `API_BASE_URL` → ключ в Info.plist. В Debug это
-  `http://localhost:8080` (симулятор видит сервер на Mac), для этого в Debug включён
-  `NSAllowsLocalNetworking`. Для запуска на телефоне — IP Mac в локальной сети.
-- **Названия валют** — локализованные из `Locale.localizedString(forCurrencyCode:)`,
-  английское название с сервера — запасной вариант.
+- **Офлайн-кэш последнего ответа** — `RatesCache` (`actor`, `Caches/rates-cache-v2.json`): последний
+  `/rates?base=EUR` (курсы строками), его `ETag`, когда скачан (`fetchedAt`), когда сервер последний раз
+  подтвердил (`validatedAt`) и до какого момента не спрашивать (`expiresAt` = сейчас + `max-age`).
+  `RatesRepository` решает, идти ли в сеть:
+
+  | Ситуация | Запрос | Результат |
+  |---|---|---|
+  | кэш свежий (запуск, возврат из фона) | нет | курсы из кэша |
+  | кэш истёк или pull-to-refresh | `GET /rates?base=EUR` + `If-None-Match` | `304` — продлить срок; `200` — заменить кэш |
+  | первый запуск, кэша нет | `GET /rates?base=EUR` без `If-None-Match` | `200` — сохранить |
+  | сервер недоступен | был | ошибка; на экране кэш и плашка «показаны курсы, обновлённые …» |
+
+  `URLSession` работает без `URLCache`, чтобы системный кэш не отвечал вместо нашего и не вытеснял
+  офлайн-копию. История курса будет кэшироваться только в памяти.
+- **Адрес сервера** — build setting `API_BASE_URL` → ключ `APIBaseURL` в Info.plist (по умолчанию
+  `http://127.0.0.1:8080`: симулятор видит сервер на Mac), можно переопределить аргументом запуска
+  `-APIBaseURL`. ATS разрешает HTTP только к локальным адресам (`NSAllowsLocalNetworking`);
+  других адресов в приложении нет. Для телефона — IP Mac в локальной сети.
+- **Список и названия валют** — из снимка курсов (`/rates` содержит все коды), названия —
+  локализованные `Locale.localizedString(forCurrencyCode:)`. Отдельный запрос `/currencies`
+  клиенту не нужен; эндпоинт остаётся для других клиентов API.
 
 ### Экраны
 
 | Экран | Модель | Данные |
 |---|---|---|
 | Конвертер | `ConverterViewModel` | `/rates?base=EUR` (кэш), расчёт на клиенте |
-| Выбор валюты | — (список + поиск) | `/currencies` (кэш) |
+| Выбор валюты | — (список + поиск) | коды из снимка `/rates`, названия из `Locale` |
 | История курса | `RateHistoryViewModel` | `/timeseries?base=&symbols=` |
 
 ---
@@ -609,14 +621,15 @@ iOS-клиент собирается в Xcode, в Docker он не входит
   (шаг 2) — готово, 52 теста.
 - Docker (шаг 3): `Dockerfile`, `docker-compose.yml` и скрипт проверки написаны; запуск в Docker
   ещё не проверен — на машине разработки Docker не установлен.
-- iOS-клиент временно ходит во Frankfurter напрямую через `FrankfurterClient` и кэширует
-  последний ответ без `ETag`.
+- iOS-клиент (шаг 4) ходит только на наш сервер: `ServerRatesAPI`, кэш с `ETag` и сроком годности,
+  41 тест; проверено в симуляторе — холодный старт (`200`), запуск при выключенном сервере
+  (курсы из кэша без запроса, при обновлении — плашка), обновление после включения (`304`).
 
 **План:**
 
 1. ~~Сервер: `Package.swift`, Vapor, миграции SQLite, `RatesSyncService` с бэкфиллом, `SyncScheduler`.~~ Готово.
 2. ~~Эндпоинты `/currencies`, `/rates`, `/timeseries`, `/health`, `HTTPCachingMiddleware`, тесты.~~ Готово.
 3. `Dockerfile` и `docker-compose.yml`, проверка `docker compose up`. Файлы готовы, проверка ждёт Docker (`scripts/verify-docker.sh`).
-4. Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.
+4. ~~Клиент: `HTTPClient` + `ServerRatesAPI`, кэш с `ETag` и сроком годности, удаление `FrankfurterClient`.~~ Готово.
 5. Клиент: экран истории курса на Swift Charts.
 6. Общие тест-векторы кросс-курсов, скриншоты и видео работающего приложения.
