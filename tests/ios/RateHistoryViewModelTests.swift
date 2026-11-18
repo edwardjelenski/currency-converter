@@ -50,7 +50,8 @@ struct RateHistoryViewModelTests {
             Issue.record("Expected empty, got \(model.content)")
             return
         }
-        #expect(message.contains("working days"))
+        // Language-independent: the simulator may run in Russian.
+        #expect(message == String(localized: "Not enough data to draw \("USD → EUR") for \(HistoryPeriod.week.displayName). The ECB publishes rates on working days only."))
     }
 
     @Test(arguments: [URLError.Code.cannotConnectToHost, .notConnectedToInternet, .timedOut])
@@ -66,7 +67,7 @@ struct RateHistoryViewModelTests {
             return
         }
         #expect(failure.isOffline)
-        #expect(failure.title == "No connection")
+        #expect(failure.title == String(localized: "No connection"))
     }
 
     @Test func serverErrorShowsServerMessage() async {
@@ -77,7 +78,7 @@ struct RateHistoryViewModelTests {
         await model.load()
 
         #expect(model.content == .failed(.init(
-            title: "Couldn't load history",
+            title: String(localized: "Couldn't load history"),
             message: "Rates are still being loaded. Try again shortly.",
             isOffline: false
         )))
@@ -93,7 +94,7 @@ struct RateHistoryViewModelTests {
         await model.load()
 
         #expect(model.content == .chart(month))
-        #expect(model.staleNotice?.contains("Can't reach") == true)
+        #expect(model.staleNotice == String(localized: "Can't reach the rates server. Check your connection and try again."))
     }
 
     @Test func periodSelectsTheRequestedRange() async {
