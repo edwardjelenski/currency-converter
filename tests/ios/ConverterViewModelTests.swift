@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct ConverterViewModelTests {
     private func makeModel(
-        api: MockRatesAPI = MockRatesAPI(),
+        api: any RatesAPI = MockRatesAPI(),
         cache: RatesCache = makeTemporaryCache(),
         defaults: UserDefaults = makeIsolatedDefaults(),
         locale: Locale = Locale(identifier: "en_US")
@@ -64,11 +64,30 @@ struct ConverterViewModelTests {
 
     @Test func offlineWithoutCacheShowsError() async {
         let model = makeModel(api: MockRatesAPI(.failure(URLError(.cannotConnectToHost))))
+        #expect(!model.hasAttemptedLoad) // the view shows a spinner, not the error, until now
 
         await model.load()
 
+        #expect(model.hasAttemptedLoad)
         #expect(!model.hasRates)
-        #expect(model.errorMessage != nil)
+        #expect(model.errorMessage == String(localized: "Can't reach the rates server. Check your connection and try again."))
+    }
+
+    @Test func tinyRatesKeepSignificantDigits() {
+        // Review I2: 0…4 decimal places showed "1 IDR = 0 EUR".
+        let rates = ExchangeRates(base: "EUR", date: "2026-11-18", rates: ["IDR": 20000, "USD": 2])
+        let model = ConverterViewModel(
+            repository: RatesRepository(api: MockRatesAPI(), cache: makeTemporaryCache()),
+            defaults: makeIsolatedDefaults(),
+            locale: Locale(identifier: "en_US"),
+            initialSnapshot: CachedRates(rates: rates, etag: nil, fetchedAt: .now, validatedAt: .now, expiresAt: .now)
+        )
+        model.selectSource("IDR")
+        model.selectTarget("EUR")
+        #expect(model.rateDescription == "1 IDR = 0.00005 EUR")
+        model.selectSource("EUR")
+        model.selectTarget("IDR")
+        #expect(model.rateDescription == "1 EUR = 20,000 IDR")
     }
 
     @Test func launchWithFreshCacheWorksOfflineWithoutRequest() async throws {
@@ -115,12 +134,52 @@ struct ConverterViewModelTests {
 
     @Test func unsupportedSavedCurrencyFallsBack() async {
         let defaults = makeIsolatedDefaults()
-        defaults.set("RUB", forKey: "converter.sourceCurrency")
+        defaults.set("RUB", forKey: "converter.sourceCurrency") // target stays the default EUR
+        let model = makeModel(defaults: defaults)
+
+        await model.load()
+
+        // Review I6: the replacement must not turn the pair into EUR → EUR.
+        #expect(model.sourceCode == "USD")
+        #expect(model.targetCode == "EUR")
+    }
+
+    @Test func unsupportedSavedTargetFallsBackToAnotherCurrency() async {
+        let defaults = makeIsolatedDefaults()
+        defaults.set("EUR", forKey: "converter.sourceCurrency")
+        defaults.set("BGN", forKey: "converter.targetCurrency")
         let model = makeModel(defaults: defaults)
 
         await model.load()
 
         #expect(model.sourceCode == "EUR")
+        #expect(model.targetCode == "USD")
+    }
+
+    @Test func pullToRefreshDuringARefreshStillRevalidates() async {
+        let api = GatedRatesAPI()
+        let model = makeModel(api: api)
+
+        let launch = Task { await model.load() }
+        await waitUntil { await api.callCount == 1 }
+        #expect(model.isRefreshing)
+
+        // Review I8: a pull to refresh while the launch refresh is in flight used to be
+        // dropped. Now it waits for that request instead of racing it...
+        let pull = Task { await model.refresh() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(await api.callCount == 1)
+
+        // ...and revalidates once it is done.
+        await api.releaseWaiting()
+        await waitUntil { await api.callCount == 2 }
+        await api.releaseWaiting()
+        await launch.value
+        await pull.value
+
+        #expect(await api.callCount == 2)
+        #expect(!model.isRefreshing)
+        #expect(model.hasRates)
     }
 
     @Test func selectionIsPersisted() {

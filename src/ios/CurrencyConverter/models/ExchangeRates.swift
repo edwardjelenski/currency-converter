@@ -34,9 +34,11 @@ struct ExchangeRates: Hashable, Sendable {
         rate(from: source, to: target).map { amount * $0 }
     }
 
-    /// Publication date parsed from `date`.
+    /// Publication date parsed from `date`, as local midnight — formatted for display it
+    /// shows the same calendar day everywhere (GMT midnight would be the previous day in
+    /// the Americas).
     var publishedAt: Date? {
-        try? Date(date, strategy: Date.ISO8601FormatStyle().year().month().day())
+        RateDay.date(from: date)
     }
 }
 

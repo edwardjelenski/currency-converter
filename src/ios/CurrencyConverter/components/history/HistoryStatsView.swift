@@ -52,6 +52,6 @@ struct ChangeTint {
     let color: Color
 
     init(_ ratio: Decimal) {
-        color = ratio > 0 ? .green : (ratio < 0 ? .red : .secondary)
+        color = ratio > 0 ? Theme.positive : (ratio < 0 ? Theme.negative : .secondary)
     }
 }

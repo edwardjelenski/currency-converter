@@ -21,7 +21,7 @@ struct RateHistoryRepository: Sendable {
 
     let api: any RatesAPI
     private let memory = MemoryCache()
-    var now: @Sendable () -> Date = { .now }
+    let now: @Sendable () -> Date
 
     init(api: any RatesAPI, now: @escaping @Sendable () -> Date = { .now }) {
         self.api = api

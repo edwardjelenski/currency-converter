@@ -11,7 +11,10 @@ import Foundation
 ///   digits (`1.234` in German, `1,234,567` in English). Otherwise it is the decimal separator.
 enum AmountParser {
     static func parse(_ text: String, locale: Locale) -> Decimal? {
-        let text = text.filter { !$0.isWhitespace }
+        // Spaces and apostrophes only ever group digits (1 234, 1'234, 1’234), and so does a
+        // locale's own grouping separator when it isn't "." or ",".
+        let extraGrouping = locale.groupingSeparator.flatMap { $0 == "." || $0 == "," ? nil : $0 } ?? ""
+        let text = text.filter { !$0.isWhitespace && !"'’".contains($0) && !extraGrouping.contains($0) }
         guard !text.isEmpty else { return nil }
 
         let lastDot = text.lastIndex(of: ".")
@@ -55,7 +58,8 @@ enum AmountParser {
     private static func isGrouping(_ separator: Character, in text: String, locale: Locale) -> Bool {
         guard locale.groupingSeparator == String(separator) else { return false }
         let groups = text.split(separator: separator, omittingEmptySubsequences: false)
-        guard let first = groups.first, !first.isEmpty, first.count <= 3 else { return false }
+        // "0.125" is a fraction, not a thousands group: a grouped number never starts with 0.
+        guard let first = groups.first, !first.isEmpty, first.count <= 3, first.first != "0" else { return false }
         return groups.dropFirst().allSatisfy { $0.count == 3 }
     }
 }

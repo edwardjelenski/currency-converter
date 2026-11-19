@@ -23,6 +23,13 @@ struct AmountParserTests {
         ("de_DE", "1.234,5", "1234.5"),
         ("ru_RU", "1\u{00A0}234,5", "1234.5"),
         ("ru_RU", "1 234 567", "1234567"),
+        // Review I11: a group never starts with 0, so these are fractions
+        ("de_DE", "0.125", "0.125"),
+        ("en_US", "0,125", "0.125"),
+        // Apostrophes group digits (Swiss style), whatever the locale
+        ("de_CH", "1’234.5", "1234.5"),
+        ("de_CH", "1'234.5", "1234.5"),
+        ("en_US", "1'234", "1234"),
         // Trailing / leading separator while typing
         ("en_US", "12.", "12"),
         ("ru_RU", ",5", "0.5"),

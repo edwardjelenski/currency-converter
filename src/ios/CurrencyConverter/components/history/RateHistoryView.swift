@@ -7,6 +7,10 @@ struct RateHistoryView: View {
     var previewSelection: Date?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Bumped by "Try Again": part of the task id, so the retry is a structured task
+    /// that is cancelled when the screen goes away.
+    @State private var retryCount = 0
 
     var body: some View {
         ScrollView {
@@ -15,7 +19,7 @@ struct RateHistoryView: View {
                 Picker("Period", selection: $model.period) {
                     ForEach(HistoryPeriod.allCases) { period in
                         Text(period.label)
-                            .accessibilityLabel(period.displayName)
+                            .accessibilityLabel(Text(period.accessibilityLabel))
                             .tag(period)
                     }
                 }
@@ -44,13 +48,18 @@ struct RateHistoryView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Swap currencies", systemImage: "arrow.left.arrow.right") {
-                    withAnimation(.snappy) { model.swapPair() }
+                    withAnimation(reduceMotion ? nil : .snappy) { model.swapPair() }
                 }
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: model.base)
         .refreshable { await model.load() }
-        .task(id: model.requestID) { await model.load() }
+        .task(id: "\(model.requestID)#\(retryCount)") { await model.load() }
+        .onChange(of: model.staleNotice) { _, notice in
+            if let notice {
+                AccessibilityNotification.Announcement(String(localized: "Couldn't update rates. \(notice)")).post()
+            }
+        }
     }
 
     // MARK: Header
@@ -64,7 +73,7 @@ struct RateHistoryView: View {
             if let last = model.history?.last {
                 Text(verbatim: "\(model.format(rate: last.rate)) \(model.target)")
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold).monospacedDigit())
-                    .contentTransition(.numericText())
+                    .contentTransition(reduceMotion ? .identity : .numericText())
                 // Change and "over 1 month · date" side by side, or stacked at accessibility sizes.
                 let changeLayout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
@@ -88,7 +97,7 @@ struct RateHistoryView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .animation(.snappy, value: model.history?.last)
+        .animation(reduceMotion ? nil : .snappy, value: model.history?.last)
     }
 
     // MARK: Chart area
@@ -120,14 +129,16 @@ struct RateHistoryView: View {
             } description: {
                 Text(failure.message)
             } actions: {
-                Button("Try Again") { Task { await model.load() } }
+                Button("Try Again") { retryCount += 1 }
                     .buttonStyle(.borderedProminent)
             }
         }
     }
 }
 
-/// Owns the view model for a pushed history screen, so it survives parent re-renders.
+/// Owns the view model for a pushed history screen. `@State` keeps the model created when
+/// the screen first appeared; a later re-render runs `init` again, and SwiftUI discards that
+/// new model (cheap: nothing is loaded in `init`).
 struct RateHistoryScreen: View {
     @State private var model: RateHistoryViewModel
 

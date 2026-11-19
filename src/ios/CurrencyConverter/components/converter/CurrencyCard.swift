@@ -24,7 +24,7 @@ struct CurrencyCard<Value: View>: View {
             layout {
                 Button(action: pick) {
                     HStack(spacing: 8) {
-                        Text(currency.flag).font(.title2)
+                        Text(currency.flag).font(.title2).accessibilityHidden(true)
                         Text(currency.code).font(.headline)
                         Image(systemName: "chevron.down")
                             .font(.caption.weight(.semibold))

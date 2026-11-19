@@ -27,6 +27,36 @@ struct FavoritesTests {
         let rows = model.favoriteConversions
         #expect(rows.map(\.currency.code) == ["EUR", "GBP", "JPY", "CHF"])
         #expect(rows.map(\.amount) == [5, 5, 1000, nil]) // CHF isn't in the fixture → no rate
+        #expect(rows.map(\.hasRate) == [true, true, true, false])
+    }
+
+    @Test func emptyAmountIsNotReportedAsMissingRate() {
+        // Review I3: an empty field showed "No rate" on every favorite.
+        let model = makeModel()
+        model.amountText = ""
+
+        let rows = model.favoriteConversions
+        #expect(rows.allSatisfy { $0.amount == nil })
+        #expect(rows.map(\.hasRate) == [true, true, true, false])
+    }
+
+    @Test func tappingTheSourceFavoriteSwaps() {
+        // Review I10: it used to make the pair EUR → EUR.
+        let model = makeModel()
+        model.selectSource("EUR")
+        model.selectTarget("USD")
+
+        model.selectFavorite("EUR")
+
+        #expect(model.sourceCode == "USD")
+        #expect(model.targetCode == "EUR")
+    }
+
+    @Test func tappingAnotherFavoriteMakesItTheTarget() {
+        let model = makeModel()
+        model.selectFavorite("JPY")
+        #expect(model.targetCode == "JPY")
+        #expect(model.sourceCode == "USD")
     }
 
     @Test func favoriteAmountsFollowTheSourceCurrency() {

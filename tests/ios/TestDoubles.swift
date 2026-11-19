@@ -116,3 +116,35 @@ func makeHistory(base: String = "USD", target: String = "EUR", _ points: [(Strin
         RatePoint(day: day, date: RateDay.date(from: day)!, rate: Decimal(string: rate)!)
     })
 }
+
+/// Holds every `latestRates` call until the test releases it, to make overlapping
+/// refreshes deterministic.
+actor GatedRatesAPI: RatesAPI {
+    private(set) var callCount = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
+        callCount += 1
+        await withCheckedContinuation { waiting.append($0) }
+        return .modified(.fixture, etag: "\"v1\"", maxAge: 3600)
+    }
+
+    func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
+        throw URLError(.badServerResponse)
+    }
+
+    func releaseWaiting() {
+        waiting.forEach { $0.resume() }
+        waiting.removeAll()
+    }
+}
+
+/// Yields until `condition` holds (or gives up after a while, letting the expectation fail).
+@MainActor
+func waitUntil(_ condition: () async -> Bool) async {
+    var attempts = 0
+    while attempts < 10_000, await !condition() {
+        attempts += 1
+        await Task.yield()
+    }
+}

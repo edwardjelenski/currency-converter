@@ -1,12 +1,35 @@
 import SwiftUI
 
 struct ConversionRow: View {
+    enum Amount: Equatable {
+        /// No amount typed: shown as "—", read as "No amount".
+        case none
+        case text(String)
+
+        var display: String {
+            if case let .text(text) = self { text } else { "—" }
+        }
+
+        var spoken: String {
+            if case let .text(text) = self { text } else { String(localized: "No amount") }
+        }
+    }
+
     let currency: Currency
-    let amount: String
+    let amount: Amount
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        content
+            // One VoiceOver element: "Japanese Yen, JPY, ¥23,456" — no flag emoji read aloud.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: "\(currency.name()), \(currency.code)"))
+            .accessibilityValue(amount.spoken)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if dynamicTypeSize.isAccessibilitySize {
             // Name and amount don't fit on one line at accessibility sizes: stack them.
             VStack(alignment: .leading, spacing: 4) {
@@ -17,7 +40,7 @@ struct ConversionRow: View {
                 Text(currency.name())
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(amount)
+                Text(amount.display)
                     .font(.body.monospacedDigit())
             }
             .padding(.vertical, 4)
@@ -41,7 +64,7 @@ struct ConversionRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            Text(amount)
+            Text(amount.display)
                 .font(.body.monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

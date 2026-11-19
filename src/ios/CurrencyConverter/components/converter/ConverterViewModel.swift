@@ -7,8 +7,10 @@ final class ConverterViewModel {
     /// A favorite currency with the typed amount converted into it.
     struct FavoriteConversion: Identifiable, Hashable {
         let currency: Currency
-        /// `nil` when there's no rate for this currency (e.g. no longer published).
+        /// The typed amount in this currency; `nil` without a rate or without a valid amount.
         let amount: Decimal?
+        /// `false` when there's no rate for this currency (e.g. no longer published).
+        let hasRate: Bool
         var id: String { currency.code }
     }
 
@@ -41,9 +43,14 @@ final class ConverterViewModel {
     private(set) var snapshot: CachedRates?
     private(set) var isRefreshing = false
     private(set) var errorMessage: String?
+    /// `false` until the first load attempt (cache, then server) has finished; until then
+    /// the screen shows a spinner, not the "no rates" error.
+    private(set) var hasAttemptedLoad = false
 
     @ObservationIgnored private let repository: RatesRepository
     @ObservationIgnored private let preferences: PreferencesStore
+    /// The refresh in flight, so a pull to refresh can wait for it instead of being dropped.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored let locale: Locale
 
     init(
@@ -93,15 +100,17 @@ final class ConverterViewModel {
     /// e.g. "1 USD = 0.9117 EUR"
     var rateDescription: String? {
         guard let rate = rates?.rate(from: sourceCode, to: targetCode) else { return nil }
-        let formattedRate = rate.formatted(.number.precision(.fractionLength(0...4)).locale(locale))
+        // Significant digits, not decimal places: 1 IDR = 0.000049946 EUR, not "0".
+        let formattedRate = rate.formatted(.number.precision(.significantDigits(1...5)).locale(locale))
         return "1 \(sourceCode) = \(formattedRate) \(targetCode)"
     }
 
     /// The typed amount in each favorite currency, in the user's order.
     var favoriteConversions: [FavoriteConversion] {
         favorites.map { code in
+            let hasRate = rates?.rate(from: sourceCode, to: code) != nil
             let converted = amount.flatMap { amount in rates?.convert(amount, from: sourceCode, to: code) }
-            return FavoriteConversion(currency: Currency(code: code), amount: converted)
+            return FavoriteConversion(currency: Currency(code: code), amount: converted, hasRate: hasRate)
         }
     }
 
@@ -111,23 +120,22 @@ final class ConverterViewModel {
         return recents.filter(available.contains).map(Currency.init(code:))
     }
 
-    func isFavorite(_ code: String) -> Bool {
-        favorites.contains(code)
-    }
-
     var hasRates: Bool { snapshot != nil }
 
     // MARK: Actions
 
-    /// How the last refresh ended; for diagnostics and the UI's "updated" line.
+    /// How the last refresh ended (cache, 200 or 304). Not shown in the UI; for tests and debugging.
     private(set) var lastRefreshSource: RatesRepository.Source?
 
     /// Shows cached rates immediately, then asks the server if the cache has expired.
     func load() async {
-        if snapshot == nil, let cached = await repository.cached() {
+        if snapshot == nil, let cached = await repository.cached(), snapshot == nil {
+            // Re-checked after the await: a foreground refresh may have landed meanwhile,
+            // and the disk copy must not replace fresher rates.
             apply(cached)
         }
         await refresh(force: false)
+        hasAttemptedLoad = true
     }
 
     /// Pull to refresh: always asks the server (conditionally, so usually a cheap `304`).
@@ -141,7 +149,23 @@ final class ConverterViewModel {
     }
 
     private func refresh(force: Bool) async {
-        guard !isRefreshing else { return }
+        if let running = refreshTask {
+            // A refresh is already running: wait for it. A non-forced request is covered by
+            // it; a forced one (pull to refresh) still revalidates afterwards.
+            await running.value
+            guard force else { return }
+        }
+        let task = Task { await performRefresh(force: force) }
+        refreshTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if refreshTask == task { refreshTask = nil }
+    }
+
+    private func performRefresh(force: Bool) async {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
@@ -154,7 +178,7 @@ final class ConverterViewModel {
         } catch let error as URLError where error.code == .cancelled {
             // Same as above, surfaced by URLSession.
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 
@@ -172,6 +196,15 @@ final class ConverterViewModel {
     func selectTarget(_ code: String) {
         targetCode = code
         noteRecent(code)
+    }
+
+    /// Tap on a favorite: make it the target, or swap if it is the source already.
+    func selectFavorite(_ code: String) {
+        if code == sourceCode {
+            swapCurrencies()
+        } else {
+            selectTarget(code)
+        }
     }
 
     /// From the picker in favorites mode: adds at the end, or removes if already there.
@@ -199,6 +232,10 @@ final class ConverterViewModel {
         favorites = remaining
     }
 
+    private func fallbackCode(in codes: Set<String>, excluding excluded: String) -> String {
+        (["EUR", "USD"] + codes.sorted()).first { codes.contains($0) && $0 != excluded } ?? excluded
+    }
+
     private func noteRecent(_ code: String) {
         recents = [code] + recents.filter { $0 != code }.prefix(PreferencesStore.maxRecents - 1)
     }
@@ -212,9 +249,14 @@ final class ConverterViewModel {
     private func apply(_ snapshot: CachedRates) {
         self.snapshot = snapshot
         let codes = Set(snapshot.rates.currencyCodes)
-        if !codes.contains(sourceCode) { sourceCode = snapshot.rates.base }
-        if !codes.contains(targetCode) {
-            targetCode = codes.contains("USD") && sourceCode != "USD" ? "USD" : snapshot.rates.base
+        // A saved currency that is no longer published (e.g. BGN) gets a replacement,
+        // and the replacement never makes the pair X → X.
+        let sourceReplaced = !codes.contains(sourceCode)
+        if sourceReplaced {
+            sourceCode = fallbackCode(in: codes, excluding: targetCode)
+        }
+        if !codes.contains(targetCode) || (sourceReplaced && targetCode == sourceCode) {
+            targetCode = fallbackCode(in: codes, excluding: sourceCode)
         }
     }
 }

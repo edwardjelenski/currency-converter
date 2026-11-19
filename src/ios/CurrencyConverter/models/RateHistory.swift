@@ -17,7 +17,7 @@ enum HistoryPeriod: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .quarter: (.month, -3)
         case .year: (.year, -1)
         }
-        return calendar.date(byAdding: component.0, value: component.1, to: end)!
+        return calendar.date(byAdding: component.0, value: component.1, to: end) ?? end
     }
 
     /// Short label for the period picker.
@@ -30,7 +30,18 @@ enum HistoryPeriod: String, CaseIterable, Identifiable, Hashable, Sendable {
         }
     }
 
-    /// Full name, as in "over 1 month" and for VoiceOver.
+    /// For VoiceOver on the period picker: a standalone name ("1 week" alone reads wrong
+    /// in Russian, where `displayName` is inflected for "за 1 неделю").
+    var accessibilityLabel: LocalizedStringResource {
+        switch self {
+        case .week: LocalizedStringResource("One week", comment: "VoiceOver label of the 1W period")
+        case .month: LocalizedStringResource("One month", comment: "VoiceOver label of the 1M period")
+        case .quarter: LocalizedStringResource("Three months", comment: "VoiceOver label of the 3M period")
+        case .year: LocalizedStringResource("One year", comment: "VoiceOver label of the 1Y period")
+        }
+    }
+
+    /// Full name, as in "over 1 month".
     var displayName: String {
         switch self {
         case .week: String(localized: "1 week", comment: "History period, used in 'over 1 week'")

@@ -356,7 +356,8 @@ Swift Testing. Без сторонних зависимостей.
 
 - **Модели экранов — `@Observable` на `@MainActor`**: `ConverterViewModel` (ввод, выбор валют,
   результат) и `RateHistoryViewModel` (пара, период 1Н / 1М / 3М / 1Г, точки графика).
-  Состояние загрузки — `enum LoadState { idle, loading, loaded, failed }`.
+  Состояние загрузки: в конвертере — `hasAttemptedLoad`, `isRefreshing` и `errorMessage` поверх
+  последнего снимка курсов; в истории — `enum Content { loading, chart, empty, failed }`.
 - **Сетевой слой за протоколами** — два уровня, оба подменяются в тестах:
   ```swift
   protocol HTTPClient: Sendable {

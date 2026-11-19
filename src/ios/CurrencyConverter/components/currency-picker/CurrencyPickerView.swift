@@ -100,9 +100,10 @@ struct CurrencyPickerView: View {
                         Text(verbatim: "\(currency.flag) \(currency.code)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(verbatim: currency.code))
                     }
                 } else {
-                    Text(currency.flag).font(.title2)
+                    Text(currency.flag).font(.title2).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(currency.name())
                         Text(currency.code)

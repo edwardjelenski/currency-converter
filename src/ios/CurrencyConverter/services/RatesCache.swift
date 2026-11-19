@@ -4,6 +4,10 @@ import Foundation
 /// the server's `ETag` and how long it may be used without asking.
 actor RatesCache {
     private let fileURL: URL
+    /// The snapshot in memory after the first read or write, so revalidations don't re-read
+    /// and re-decode the file every time.
+    private var current: CachedRates?
+    private var didLoadFromDisk = false
 
     init(fileURL: URL = RatesCache.defaultFileURL) {
         self.fileURL = fileURL
@@ -20,14 +24,21 @@ actor RatesCache {
     }
 
     func load() -> CachedRates? {
-        try? FileManager.default.removeItem(at: Self.legacyFileURL)
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(CachedRates.self, from: data)
+        if !didLoadFromDisk {
+            didLoadFromDisk = true
+            try? FileManager.default.removeItem(at: Self.legacyFileURL)
+            if let data = try? Data(contentsOf: fileURL) {
+                current = try? JSONDecoder().decode(CachedRates.self, from: data)
+            }
+        }
+        return current
     }
 
     func save(_ rates: CachedRates) throws {
         let data = try JSONEncoder().encode(rates)
         try data.write(to: fileURL, options: .atomic)
+        current = rates
+        didLoadFromDisk = true
     }
 }
 

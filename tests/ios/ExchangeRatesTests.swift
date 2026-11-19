@@ -31,7 +31,9 @@ struct ExchangeRatesTests {
 
     @Test func parsesPublicationDate() throws {
         let date = try #require(rates.publishedAt)
-        let components = Calendar(identifier: .gregorian).dateComponents(in: .gmt, from: date)
+        // Review I1: the same calendar day in the user's time zone (GMT midnight was
+        // "17 November" in New York).
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         #expect(components.year == 2026)
         #expect(components.month == 11)
         #expect(components.day == 18)

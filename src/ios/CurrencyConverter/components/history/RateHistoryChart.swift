@@ -25,6 +25,7 @@ struct RateHistoryChart: View {
     }
 
     var body: some View {
+        let yDomain = yDomain
         Chart {
             ForEach(history.points) { point in
                 AreaMark(
@@ -34,6 +35,8 @@ struct RateHistoryChart: View {
                 )
                 .foregroundStyle(areaGradient)
                 .interpolationMethod(.monotone)
+                // Decoration: VoiceOver reads each day once, from the line.
+                .accessibilityHidden(true)
 
                 LineMark(
                     x: .value("Date", point.date, unit: .day),
@@ -57,6 +60,7 @@ struct RateHistoryChart: View {
                     .annotation(position: .top, spacing: 6, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                         SelectionBubble(value: formatRate(selectedPoint.rate), date: selectedPoint.date)
                     }
+                    .accessibilityHidden(true)
 
                 PointMark(
                     x: .value("Date", selectedPoint.date, unit: .day),
@@ -64,8 +68,11 @@ struct RateHistoryChart: View {
                 )
                 .symbolSize(70)
                 .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
             }
         }
+        // Audio Graph and the chart summary in the VoiceOver rotor.
+        .accessibilityChartDescriptor(RateChartDescriptor(history: history, yDomain: yDomain))
         .chartXSelection(value: $selectedDate)
         .chartYScale(domain: yDomain)
         // Room at both ends so the first and last x-axis labels stay inside the chart.
@@ -113,6 +120,40 @@ struct RateHistoryChart: View {
             colors: [Color.accentColor.opacity(0.25), Color.accentColor.opacity(0.02)],
             startPoint: .top,
             endPoint: .bottom
+        )
+    }
+}
+
+/// Describes the chart for VoiceOver's Audio Graph: the dates on x, the rate on y.
+private struct RateChartDescriptor: AXChartDescriptorRepresentable {
+    let history: RateHistory
+    let yDomain: ClosedRange<Double>
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let times = history.points.map { $0.date.timeIntervalSince1970 }
+        let xRange = (times.min() ?? 0)...(times.max() ?? 1)
+        let xAxis = AXNumericDataAxisDescriptor(
+            title: String(localized: "Date"),
+            range: xRange,
+            gridlinePositions: []
+        ) { Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .omitted) }
+        let yAxis = AXNumericDataAxisDescriptor(
+            title: String(localized: "Rate"),
+            range: yDomain,
+            gridlinePositions: []
+        ) { Decimal($0).formatted(.number.precision(.significantDigits(1...6))) }
+        let series = AXDataSeriesDescriptor(
+            name: String(localized: "Rate"),
+            isContinuous: true,
+            dataPoints: history.points.map { AXDataPoint(x: $0.date.timeIntervalSince1970, y: $0.plotValue) }
+        )
+        return AXChartDescriptor(
+            title: String(localized: "Rate history"),
+            summary: nil,
+            xAxis: xAxis,
+            yAxis: yAxis,
+            additionalAxes: [],
+            series: [series]
         )
     }
 }

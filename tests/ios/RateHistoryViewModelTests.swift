@@ -70,16 +70,17 @@ struct RateHistoryViewModelTests {
         #expect(failure.title == String(localized: "No connection"))
     }
 
-    @Test func serverErrorShowsServerMessage() async {
+    @Test func notReadyServerIsExplainedInTheUsersLanguage() async {
         let api = MockRatesAPI()
         await api.setHistory(.failure(RatesAPIError.server(status: 503, code: "not_ready", message: "Rates are still being loaded. Try again shortly.")))
         let model = makeModel(api)
 
         await model.load()
 
+        // Review I5: the server's English text is not shown as is.
         #expect(model.content == .failed(.init(
             title: String(localized: "Couldn't load history"),
-            message: "Rates are still being loaded. Try again shortly.",
+            message: String(localized: "The server is still loading rates. Try again in a minute."),
             isOffline: false
         )))
     }

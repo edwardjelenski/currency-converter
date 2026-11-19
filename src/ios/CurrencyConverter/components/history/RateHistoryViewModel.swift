@@ -65,6 +65,8 @@ final class RateHistoryViewModel {
     func load() async {
         let key = repository.key(base: base, target: target, period: period)
         if let cached = await repository.cached(key) {
+            // The user may have switched period or pair during the await.
+            guard isCurrent(key) else { return }
             show(cached.history, for: key)
             loadedAt = cached.loadedAt
         } else if shownKey != key {
@@ -143,22 +145,11 @@ final class RateHistoryViewModel {
     }
 
     static func failure(for error: any Error) -> Failure {
-        if let urlError = error as? URLError, Self.offlineCodes.contains(urlError.code) {
-            return Failure(
-                title: String(localized: "No connection"),
-                message: String(localized: "Can't reach the rates server. Check your connection and try again."),
-                isOffline: true
-            )
-        }
+        let offline = UserFacingError.isOffline(error)
         return Failure(
-            title: String(localized: "Couldn't load history"),
-            message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-            isOffline: false
+            title: offline ? String(localized: "No connection") : String(localized: "Couldn't load history"),
+            message: UserFacingError.message(for: error),
+            isOffline: offline
         )
     }
-
-    private static let offlineCodes: Set<URLError.Code> = [
-        .notConnectedToInternet, .cannotConnectToHost, .cannotFindHost, .timedOut,
-        .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff,
-    ]
 }

@@ -13,9 +13,12 @@ struct ServerRatesAPI: RatesAPI {
     private static let logger = Logger(subsystem: "com.eduardyelenskiy.currencyconverter", category: "network")
 
     func latestRates(base: String, ifNoneMatch etag: String?) async throws -> Conditional<ExchangeRates> {
-        var components = URLComponents(url: baseURL.appending(path: "rates"), resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: baseURL.appending(path: "rates"), resolvingAgainstBaseURL: false) else {
+            throw URLError(.badURL)
+        }
         components.queryItems = [URLQueryItem(name: "base", value: base)]
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let etag {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
@@ -45,14 +48,17 @@ struct ServerRatesAPI: RatesAPI {
     }
 
     func history(base: String, target: String, start: Date, end: Date) async throws -> RateHistory {
-        var components = URLComponents(url: baseURL.appending(path: "timeseries"), resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: baseURL.appending(path: "timeseries"), resolvingAgainstBaseURL: false) else {
+            throw URLError(.badURL)
+        }
         components.queryItems = [
             URLQueryItem(name: "base", value: base),
             URLQueryItem(name: "symbols", value: target),
             URLQueryItem(name: "start", value: RateDay.string(from: start)),
             URLQueryItem(name: "end", value: RateDay.string(from: end)),
         ]
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let path = "/timeseries?\(components.percentEncodedQuery ?? "")"

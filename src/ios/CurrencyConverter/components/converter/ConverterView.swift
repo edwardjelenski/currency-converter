@@ -15,6 +15,10 @@ struct ConverterView: View {
     @State private var swapCount = 0
     @FocusState private var amountFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// `.snappy`, or no animation with Reduce Motion on.
+    private var motion: Animation? { reduceMotion ? nil : .snappy }
 
     private enum PickerTarget: String, Identifiable {
         case source, target, favorites
@@ -26,7 +30,9 @@ struct ConverterView: View {
             Group {
                 if model.hasRates {
                     content
-                } else if model.isRefreshing {
+                } else if model.isRefreshing || !model.hasAttemptedLoad {
+                    // Before the first attempt finishes there is nothing to report yet:
+                    // a spinner, not a flash of "No rates yet / Try Again".
                     ProgressView("Loading rates…")
                 } else {
                     unavailable
@@ -48,6 +54,16 @@ struct ConverterView: View {
             }
         }
         .task { await model.load() }
+        .onChange(of: model.errorMessage) { _, message in
+            // The banner appears silently otherwise; VoiceOver users hear why rates are stale.
+            if let message {
+                AccessibilityNotification.Announcement(String(localized: "Couldn't update rates. \(message)")).post()
+            }
+        }
+        .onChange(of: model.favorites.isEmpty) { _, isEmpty in
+            // Nothing left to edit: leave Edit mode, otherwise it comes back "stuck" on the next add.
+            if isEmpty { editMode = .inactive }
+        }
     }
 
     // MARK: Content
@@ -106,21 +122,23 @@ struct ConverterView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .animation(.snappy, value: model.formattedResult)
+        .animation(motion, value: model.formattedResult)
     }
 
     private var resultText: some View {
         Text(model.formattedResult)
             .font(Theme.amountFont)
             .foregroundStyle(.tint)
-            .contentTransition(.numericText())
+            .contentTransition(reduceMotion ? .identity : .numericText())
             .textSelection(.enabled)
+            .accessibilityLabel("Converted amount")
+            .accessibilityValue(model.convertedAmount == nil ? String(localized: "No amount") : model.formattedResult)
     }
 
     private var swapButton: some View {
         Button {
             swapCount += 1
-            withAnimation(.snappy) { model.swapCurrencies() }
+            withAnimation(motion) { model.swapCurrencies() }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
                 .font(.headline)
@@ -190,31 +208,32 @@ struct ConverterView: View {
     private var favoritesSection: some View {
         Section {
             ForEach(model.favoriteConversions) { favorite in
+                let isSource = favorite.currency.code == model.sourceCode
                 Button {
-                    withAnimation(.snappy) { model.selectTarget(favorite.currency.code) }
+                    withAnimation(motion) { model.selectFavorite(favorite.currency.code) }
                 } label: {
-                    ConversionRow(
-                        currency: favorite.currency,
-                        amount: favorite.amount.map { model.format($0, currency: favorite.currency.code) } ?? String(localized: "No rate")
-                    )
+                    ConversionRow(currency: favorite.currency, amount: amountText(for: favorite))
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Theme.surface)
                 .contextMenu {
-                    Button("Rate history", systemImage: "chart.xyaxis.line") {
-                        path.append(HistoryRoute(base: model.sourceCode, target: favorite.currency.code))
+                    // EUR → EUR has no history.
+                    if !isSource {
+                        Button("Rate history", systemImage: "chart.xyaxis.line") {
+                            path.append(HistoryRoute(base: model.sourceCode, target: favorite.currency.code))
+                        }
                     }
                     Button("Reorder", systemImage: "arrow.up.arrow.down") {
-                        withAnimation { editMode = .active }
+                        withAnimation(motion) { editMode = .active }
                     }
                     Button("Remove from Favorites", systemImage: "star.slash", role: .destructive) {
-                        withAnimation { model.toggleFavorite(favorite.currency.code) }
+                        withAnimation(motion) { model.toggleFavorite(favorite.currency.code) }
                     }
                 }
-                .accessibilityHint("Makes it the currency you get")
+                .accessibilityHint(isSource ? "Swaps the currencies" : "Makes it the currency you get")
             }
             .onDelete { offsets in
-                withAnimation { model.removeFavorites(at: offsets) }
+                withAnimation(motion) { model.removeFavorites(at: offsets) }
             }
             .onMove { offsets, destination in
                 model.moveFavorites(from: offsets, to: destination)
@@ -253,9 +272,11 @@ struct ConverterView: View {
                 if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                 if !model.favorites.isEmpty {
                     Button(editMode.isEditing ? "Done" : "Edit") {
-                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                        withAnimation(motion) { editMode = editMode.isEditing ? .inactive : .active }
                     }
                     .font(.subheadline)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(.rect)
                 }
                 if dynamicTypeSize.isAccessibilitySize { Spacer() }
                 Button("Add to Favorites", systemImage: "plus.circle.fill") {
@@ -263,10 +284,19 @@ struct ConverterView: View {
                 }
                 .labelStyle(.iconOnly)
                 .font(.title3)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
             }
         }
         .textCase(nil)
         .padding(.horizontal, -4)
+    }
+
+    /// "No rate" when the currency isn't published; "—" (read as "No amount") when the field is empty.
+    private func amountText(for favorite: ConverterViewModel.FavoriteConversion) -> ConversionRow.Amount {
+        if !favorite.hasRate { return .text(String(localized: "No rate")) }
+        guard let amount = favorite.amount else { return .none }
+        return .text(model.format(amount, currency: favorite.currency.code))
     }
 
     // MARK: Picker
@@ -299,7 +329,7 @@ struct ConverterView: View {
                 recents: model.recentCurrencies,
                 selected: Set(model.favorites),
                 allowsMultipleSelection: true,
-                onSelect: { code in withAnimation { model.toggleFavorite(code) } }
+                onSelect: { code in withAnimation(motion) { model.toggleFavorite(code) } }
             )
         }
     }

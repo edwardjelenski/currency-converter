@@ -9,12 +9,16 @@ struct OfflineBanner: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.warning)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Couldn't update rates").font(.subheadline.weight(.semibold))
                 if let savedAt {
-                    Text("Showing rates last updated \(savedAt.formatted(.relative(presentation: .named))).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // Re-rendered every minute, so "2 minutes ago" doesn't freeze while the screen is open.
+                    TimelineView(.everyMinute) { _ in
+                        Text("Showing rates last updated \(savedAt.formatted(.relative(presentation: .named))).")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 Text(message)
                     .font(.caption)
@@ -24,5 +28,7 @@ struct OfflineBanner: View {
         }
         .padding()
         .background(Theme.warningBackground, in: .rect(cornerRadius: Theme.listCornerRadius))
+        // Read as one message, not three fragments.
+        .accessibilityElement(children: .combine)
     }
 }
