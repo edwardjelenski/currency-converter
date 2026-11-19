@@ -9,11 +9,6 @@ extension Request {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    func requiredQueryValue(_ name: String) throws -> String {
-        guard let value = queryValue(name) else { throw APIError.invalidParameter("'\(name)' is required.") }
-        return value
-    }
-
     func dateParameter(_ name: String) throws -> RateDate? {
         guard let value = queryValue(name) else { return nil }
         guard let date = RateDate(value) else {

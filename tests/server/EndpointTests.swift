@@ -113,6 +113,8 @@ struct EndpointTests {
         ("timeseries?start=2020-01-01&end=2026-11-18", "invalid_parameter"),
         ("timeseries?start=2026-11-12&end=2026-11-18&symbols=USD,,GBP", "invalid_parameter"),
         ("timeseries?start=2026-11-12&end=2026-11-18&symbols=GBP,XYZ", "unknown_currency"),
+        ("timeseries?base=USD&symbols=USD&start=2026-11-12&end=2026-11-18", "invalid_parameter"),
+        ("rates?date=2026-+1-05", "invalid_parameter"),
     ])
     func badParametersAre400InTheErrorFormat(path: String, code: String) async throws {
         try await withApp(configure: configureForTests) { app in

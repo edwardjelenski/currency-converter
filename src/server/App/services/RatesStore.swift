@@ -29,6 +29,12 @@ struct RatesStore: Sendable {
         try await CurrencyModel.query(on: database).count()
     }
 
+    /// Whether some currency has only its code as a name (added without upstream names).
+    func hasPlaceholderNames() async throws -> Bool {
+        let row = try await sql.raw("SELECT COUNT(*) AS n FROM currencies WHERE name = code").first()
+        return try (row?.decode(column: "n", as: Int.self) ?? 0) > 0
+    }
+
     /// Inserts or renames currencies.
     func upsert(currencies: [String: String]) async throws {
         guard !currencies.isEmpty else { return }
@@ -108,9 +114,13 @@ struct RatesStore: Sendable {
             query.where("currency", .in, currencies)
         }
         var result: [RateDate: [String: Decimal]] = [:]
+        // Up to ~40k rows for 5 years of all currencies, but only ~1300 distinct dates:
+        // parse each date once.
+        var parsedDates: [String: RateDate] = [:]
         for row in try await query.all() {
             let dateText = try row.decode(column: "date", as: String.self)
-            guard let date = RateDate(dateText) else { continue }
+            guard let date = parsedDates[dateText] ?? RateDate(dateText) else { continue }
+            parsedDates[dateText] = date
             result[date, default: [:]][try row.decode(column: "currency", as: String.self)] = try Self.decimal(row)
         }
         return result
@@ -130,7 +140,7 @@ struct RatesStore: Sendable {
         return value
     }
 
-    /// The stored rate text, for tests and diagnostics.
+    /// The stored rate text. Used by tests.
     func rate(on date: RateDate, currency: String) async throws -> String? {
         try await sql.select()
             .column("rate")

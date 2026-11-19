@@ -15,6 +15,18 @@ struct AppConfig: Sendable {
     var hostname = "127.0.0.1"
     var port = 8080
 
+    /// `HH:mm`, before the daily cut-off of the retry window (19:00 Berlin).
+    static func syncTime(from value: String) throws -> TimeOfDay {
+        guard let time = TimeOfDay(value) else {
+            throw Abort(.internalServerError, reason: "SYNC_TIME must be HH:mm, got '\(value)'")
+        }
+        let cutOff = SyncSchedule().lastAttemptBefore
+        guard (time.hour, time.minute) < (cutOff.hour, cutOff.minute) else {
+            throw Abort(.internalServerError, reason: "SYNC_TIME must be before \(cutOff) (the ECB publishes around 16:00 CET), got '\(value)'")
+        }
+        return time
+    }
+
     static func fromEnvironment() throws -> AppConfig {
         var config = AppConfig()
         if let value = Environment.get("DATABASE_PATH") { config.databasePath = value }
@@ -26,8 +38,7 @@ struct AppConfig: Sendable {
             config.backfillDays = days
         }
         if let value = Environment.get("SYNC_TIME") {
-            guard let time = TimeOfDay(value) else { throw Abort(.internalServerError, reason: "SYNC_TIME must be HH:mm, got '\(value)'") }
-            config.syncTime = time
+            config.syncTime = try syncTime(from: value)
         }
         if let value = Environment.get("SYNC_ENABLED") { config.syncEnabled = !["0", "false", "no"].contains(value.lowercased()) }
         if let value = Environment.get("HOST") { config.hostname = value }

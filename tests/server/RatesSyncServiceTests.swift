@@ -110,7 +110,8 @@ struct RatesSyncServiceTests {
             let lastRun = try #require(try await SyncRun.query(on: app.db).sort(\.$id, .descending).first())
             #expect(lastRun.status == .failed)
             #expect(lastRun.trigger == .scheduled)
-            #expect(lastRun.error == "upstream is down")
+            // Only a safe summary is stored and exposed by /health; the details go to the log.
+            #expect(lastRun.error == "Upstream request failed")
             #expect(lastRun.finishedAt != nil)
             #expect(try await RatesStore(database: app.db).storedDaysCount() == before.storedDays)
         }

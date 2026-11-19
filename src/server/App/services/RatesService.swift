@@ -46,6 +46,9 @@ struct RatesService: Sendable {
         guard end <= start.adding(days: Self.maxRangeDays) else {
             throw APIError.invalidParameter("The range from 'start' to 'end' must not exceed 5 years.")
         }
+        if let symbols, Set(symbols).subtracting([base]).isEmpty {
+            throw APIError.invalidParameter("'symbols' must contain a currency other than the base '\(base)'.")
+        }
         let latest = try await requireLatestDate()
         try await requireKnown([base] + (symbols ?? []))
 

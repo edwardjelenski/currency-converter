@@ -32,6 +32,8 @@ func configure(
     }
     app.migrations.add(CreateCurrencies(), CreateRates(), CreateSyncRuns())
     try await app.autoMigrate()
+    // A previous process may have died mid-sync; its run must not look in progress forever.
+    try await SyncRun.markInterrupted(on: app.db)
     if config.databasePath != ":memory:" {
         // WAL lets API reads proceed while a sync is writing.
         try await (app.db as! any SQLDatabase).raw("PRAGMA journal_mode=WAL").run()

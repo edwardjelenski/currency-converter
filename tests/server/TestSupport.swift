@@ -10,6 +10,8 @@ actor StubUpstream: UpstreamRatesSource {
     private(set) var requestedRanges: [ClosedRange<RateDate>] = []
     private(set) var currencyRequests = 0
     var failure: (any Error)?
+    /// Fails only the names request.
+    var namesFailure: (any Error)?
 
     let names: [String: String] = ["GBP": "British Pound", "JPY": "Japanese Yen", "USD": "United States Dollar"]
 
@@ -18,11 +20,13 @@ actor StubUpstream: UpstreamRatesSource {
     }
 
     func setFailure(_ error: (any Error)?) { failure = error }
+    func setNamesFailure(_ error: (any Error)?) { namesFailure = error }
     func setDays(_ days: [DailyRates]) { self.days = days }
 
     func currencies() async throws -> [String: String] {
         currencyRequests += 1
         if let failure { throw failure }
+        if let namesFailure { throw namesFailure }
         return names
     }
 

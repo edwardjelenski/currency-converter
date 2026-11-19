@@ -16,6 +16,8 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.9.0"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.80.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
+        .package(url: "https://github.com/vapor/sql-kit.git", from: "3.29.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: [
         .executableTarget(
@@ -26,6 +28,8 @@ let package = Package(
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "Crypto", package: "swift-crypto"),
+                .product(name: "SQLKit", package: "sql-kit"),
+                .product(name: "Logging", package: "swift-log"),
             ],
             path: "src/server/App",
             swiftSettings: swiftSettings

@@ -59,26 +59,23 @@ struct RatesSyncService: Sendable {
         logger.info("Sync (\(trigger.rawValue)) started: \(mode) \(start)...\(today)")
 
         do {
-            if try await store.currencyCount() == 0 {
-                let names = try await upstream.currencies()
-                try await store.upsert(currencies: names)
-                logger.info("Stored \(names.count) currencies")
-            }
+            try await refreshCurrencyNamesIfNeeded(store)
 
             let fetched = try await upstream.rates(from: start, to: today)
             // Reject the whole batch before writing anything if the source sent garbage.
             try Self.validate(fetched, requested: start...today)
-            let newDays = fetched.filter { latest == nil || $0.date > latest! }
-            let written = try await db.transaction { tx in
+            // Defensive: a source might not honour the range; never rewrite stored days.
+            let newDays = fetched.filter { day in latest.map { day.date > $0 } ?? true }
+            let newLatest = newDays.last?.date ?? latest
+            let status: SyncRun.Status = newDays.isEmpty ? .noNewData : .success
+            // Rates and the run's outcome are committed together.
+            let (written, storedDays) = try await db.transaction { tx in
                 let txStore = RatesStore(database: tx)
                 try await txStore.ensureCurrencies(Set(newDays.flatMap(\.rates.keys)))
-                return try await txStore.upsert(days: newDays)
+                let written = try await txStore.upsert(days: newDays)
+                try await finish(run, status: status, datesAdded: newDays.count, latest: newLatest, on: tx)
+                return (written, try await txStore.storedDaysCount())
             }
-
-            let newLatest = newDays.last?.date ?? latest
-            let storedDays = try await store.storedDaysCount()
-            let status: SyncRun.Status = newDays.isEmpty ? .noNewData : .success
-            try await finish(run, status: status, datesAdded: newDays.count, latest: newLatest, on: db)
 
             if newDays.isEmpty {
                 logger.info("Sync (\(trigger.rawValue)) finished: nothing published for \(start)...\(today) yet; \(storedDays) days in DB, latest \(newLatest?.description ?? "none")")
@@ -95,10 +92,51 @@ struct RatesSyncService: Sendable {
                 storedDays: storedDays
             )
         } catch {
-            run.error = String(describing: error)
+            if error is CancellationError || Task.isCancelled {
+                // Shutdown, not an upstream problem: don't make /health "degraded".
+                run.error = "Interrupted: the server stopped during this sync"
+                try? await finish(run, status: .interrupted, datesAdded: 0, latest: latest, on: db)
+                logger.notice("Sync (\(trigger.rawValue)) interrupted by shutdown")
+                throw CancellationError()
+            }
+            // The full error goes to the log; /health shows only a safe summary.
+            run.error = Self.publicDescription(of: error)
             try? await finish(run, status: .failed, datesAdded: 0, latest: latest, on: db)
-            logger.error("Sync (\(trigger.rawValue)) failed for \(start)...\(today): \(error)")
+            logger.error("Sync (\(trigger.rawValue)) failed for \(start)...\(today): \(String(reflecting: error))")
             throw error
+        }
+    }
+
+    /// Short, non-sensitive description for `/health` (no hosts, paths or SQL).
+    static func publicDescription(of error: any Error) -> String {
+        switch error {
+        case let error as UpstreamDataError: error.description
+        case let error as FrankfurterSource.SourceError: error.description
+        case is DecodingError: "Upstream returned data that isn't valid rates JSON"
+        default: "Upstream request failed"
+        }
+    }
+
+    /// Names are cosmetic: fetch them when missing (first run, or a currency stored with its
+    /// code as a placeholder name), and never fail the sync over them.
+    private func refreshCurrencyNamesIfNeeded(_ store: RatesStore) async throws {
+        var needsNames = try await store.currencyCount() == 0
+        if !needsNames {
+            needsNames = try await store.hasPlaceholderNames()
+        }
+        guard needsNames else { return }
+        do {
+            let names = try await upstream.currencies()
+            guard !names.isEmpty else {
+                logger.warning("Upstream returned no currency names; keeping codes as names")
+                return
+            }
+            try await store.upsert(currencies: names)
+            logger.info("Stored \(names.count) currency names")
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning("Couldn't load currency names, keeping codes as names: \(error)")
         }
     }
 

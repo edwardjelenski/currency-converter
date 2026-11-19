@@ -12,7 +12,8 @@ struct TimeOfDay: Hashable, Sendable, CustomStringConvertible {
     /// Parses `HH:mm`.
     init?(_ string: String) {
         let parts = string.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]),
+        guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
               (0..<24).contains(hour), (0..<60).contains(minute)
         else { return nil }
         self.init(hour: hour, minute: minute)

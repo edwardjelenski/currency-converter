@@ -35,21 +35,32 @@ actor SyncScheduler {
         task = Task { await self.runLoop() }
     }
 
-    func stop() {
-        task?.cancel()
-        task = nil
+    /// Cancels the loop and waits for it, so a sync in flight finishes (as `interrupted`)
+    /// before Vapor shuts down the database and HTTP client under it.
+    func stop() async {
+        guard let task else { return }
+        self.task = nil
+        task.cancel()
+        await task.value
         nextRunAt = nil
     }
 
     /// Startup sync, then scheduled syncs until `sleep` throws (cancellation).
+    ///
+    /// After a failed sync the next try comes after a growing pause (`failureRetryDelays`),
+    /// or at the next scheduled attempt if that is sooner, so a short upstream outage
+    /// at startup doesn't leave the database empty until the next publication window.
     func runLoop() async {
         // Backfill on the first start, catch up missed days on later ones.
-        await syncLoggingErrors(trigger: .startup)
+        var consecutiveFailures = await sync(trigger: .startup) ? 0 : 1
 
         while !Task.isCancelled {
             let now = service.now()
             let hasToday = (try? await service.hasRatesForToday()) ?? false
-            let next = schedule.nextAttempt(after: now, hasRatesForToday: hasToday)
+            var next = schedule.nextAttempt(after: now, hasRatesForToday: hasToday)
+            if consecutiveFailures > 0 {
+                next = min(next, now.addingTimeInterval(schedule.retryDelay(afterFailures: consecutiveFailures)))
+            }
             nextRunAt = next
             logger.info("Next sync at \(Self.format(next, in: schedule.timeZone))")
             do {
@@ -57,15 +68,19 @@ actor SyncScheduler {
             } catch {
                 return // cancelled on shutdown
             }
-            await syncLoggingErrors(trigger: .scheduled)
+            nextRunAt = nil
+            consecutiveFailures = await sync(trigger: .scheduled) ? 0 : consecutiveFailures + 1
         }
     }
 
-    private func syncLoggingErrors(trigger: SyncRun.Trigger) async {
+    /// `true` when the sync finished (with or without new data).
+    private func sync(trigger: SyncRun.Trigger) async -> Bool {
         do {
             try await service.sync(trigger: trigger)
+            return true
         } catch {
-            // Already logged and recorded in sync_runs; the next attempt follows the schedule.
+            // Already logged and recorded in sync_runs.
+            return false
         }
     }
 
@@ -85,7 +100,16 @@ struct SyncSchedulerLifecycle: LifecycleHandler {
     let scheduler: SyncScheduler
 
     func didBootAsync(_ application: Application) async throws {
+        // Lifecycle handlers run for every command; only the server should sync,
+        // not `App routes` or `App migrate`.
+        guard Self.isServeCommand(application.environment.arguments) else { return }
         await scheduler.start()
+    }
+
+    /// `serve` is also Vapor's default command when none is given.
+    static func isServeCommand(_ arguments: [String]) -> Bool {
+        guard let command = arguments.dropFirst().first, !command.hasPrefix("-") else { return true }
+        return command == "serve"
     }
 
     func shutdownAsync(_ application: Application) async {

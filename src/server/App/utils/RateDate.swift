@@ -19,6 +19,7 @@ struct RateDate: Hashable, Comparable, Sendable, CustomStringConvertible {
     init?(_ string: some StringProtocol) {
         let parts = string.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              parts.allSatisfy({ $0.allSatisfy { $0.isASCII && $0.isNumber } }),
               let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2])
         else { return nil }
         let components = DateComponents(year: year, month: month, day: day)
@@ -72,21 +73,5 @@ struct RateDate: Hashable, Comparable, Sendable, CustomStringConvertible {
 
     private var midnightUTC: Date {
         Self.utc.date(from: DateComponents(year: year, month: month, day: day))!
-    }
-}
-
-extension RateDate: Codable {
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let string = try container.decode(String.self)
-        guard let date = RateDate(string) else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Expected yyyy-MM-dd, got \(string)")
-        }
-        self = date
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(description)
     }
 }

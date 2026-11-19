@@ -1,7 +1,8 @@
 import Fluent
 import Foundation
 
-/// One attempt to pull rates from the upstream source. The latest row feeds `/health`.
+/// One attempt to pull rates from the upstream source. `/health` shows the latest
+/// finished one (not `running`, not `interrupted`) and whether one is running now.
 final class SyncRun: Model, @unchecked Sendable {
     static let schema = "sync_runs"
 
@@ -18,6 +19,8 @@ final class SyncRun: Model, @unchecked Sendable {
         /// The request succeeded (or wasn't needed) but there were no new days.
         case noNewData = "no_new_data"
         case failed
+        /// The server stopped (or crashed) mid-sync; says nothing about the upstream.
+        case interrupted
     }
 
     @ID(custom: "id", generatedBy: .database)
@@ -51,6 +54,16 @@ final class SyncRun: Model, @unchecked Sendable {
     var error: String?
 
     init() {}
+
+    /// Runs left `running` by a process that died mid-sync. Called once at startup,
+    /// before any new sync can begin.
+    static func markInterrupted(on database: any Database) async throws {
+        try await SyncRun.query(on: database)
+            .filter(\.$status == .running)
+            .set(\.$status, to: .interrupted)
+            .set(\.$error, to: "Interrupted: the server stopped during this sync")
+            .update()
+    }
 
     init(trigger: Trigger, startedAt: Date, range: ClosedRange<RateDate>?) {
         self.trigger = trigger

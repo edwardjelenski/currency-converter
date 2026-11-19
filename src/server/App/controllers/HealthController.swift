@@ -13,7 +13,7 @@ struct HealthController: RouteCollection {
         let latest = try await store.latestDate()
         let storedDays = try await store.storedDaysCount()
         let lastFinished = try await SyncRun.query(on: req.db)
-            .filter(\.$status != .running)
+            .filter(\.$status !~ [.running, .interrupted])
             .sort(\.$id, .descending)
             .first()
         let inProgress = try await SyncRun.query(on: req.db)
