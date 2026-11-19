@@ -31,6 +31,7 @@
 | iOS-клиент | Swift 6 (strict concurrency), SwiftUI, Observation, Swift Charts, String Catalogs (en, ru), iOS 17+, XcodeGen, Swift Testing |
 | Сервер | Swift 6, Vapor 4, Fluent + SQLite, REST API с ETag/Cache-Control, обновление курсов по расписанию |
 | Инфраструктура | Docker (multistage: `swift:6.4-noble` → `ubuntu:noble`), Docker Compose с healthcheck и volume для БД |
+| CI | GitHub Actions: тесты сервера на Linux, сквозная проверка Docker Compose, iOS-тесты на симуляторе |
 
 Целевая схема: приложение обращается **только к нашему серверу**, сервер сам забирает курсы
 у внешнего источника (Frankfurter / ЕЦБ) и хранит их в SQLite.
@@ -65,6 +66,7 @@
 ├── scripts/verify-docker.sh     сквозная проверка Docker Compose
 ├── docs/
 │   ├── architecture.md          схема компонентов
+│   ├── code-review.md           код-ревью: находки и решения
 │   └── screenshots/             скриншоты
 └── .agent/                      артефакты работы с ИИ-агентом
     ├── prompt-log.md            хронология запросов

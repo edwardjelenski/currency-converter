@@ -1,11 +1,17 @@
 {
-  "updated_at": "2026-11-18",
+  "updated_at": "2026-11-19",
   "agent": "Claude Code",
   "client": "Claude desktop app, Code tab",
   "model": "claude-opus-5-5",
   "model_name": "Claude Opus 5.5",
   "permission_mode": "auto",
-  "subagents": [],
+  "subagents": [
+    {
+      "tool": "Agent (subagent_type: general-purpose)",
+      "count": 2,
+      "purpose": "independent code review without the development context: one for src/server + tests/server, one for src/ios + tests/ios; every finding was then verified against the code by the main agent (docs/code-review.md)"
+    }
+  ],
   "tools_used": {
     "builtin": {
       "Bash": "shell commands: git, gh, xcodegen, xcodebuild, scripts",
@@ -13,7 +19,8 @@
       "Write": "creating and rewriting files",
       "Edit": "point edits in files",
       "ToolSearch": "loading MCP tool schemas on demand",
-      "SendUserFile": "sending screenshots to the user"
+      "SendUserFile": "sending screenshots to the user",
+      "Agent": "two background reviewer subagents for the code review"
     },
     "mcp": {
       "xcode": {
@@ -42,7 +49,7 @@
     },
     "cli": {
       "git": "commits and push to main",
-      "gh": "auth status, repo create, gitignore template, package release lookups via gh api",
+      "gh": "auth status, repo create, gitignore template, package release lookups via gh api; gh run watch / gh run view / gh api for GitHub Actions runs and job logs",
       "xcodegen": "generate CurrencyConverter.xcodeproj from src/ios/project.yml",
       "xcodebuild": "build the app, run iOS tests, -exportLocalizations to list extracted strings and check translations",
       "xcrun simctl": "list, boot, uninstall/install/launch/terminate the app, shutdown; 'spawn … log show' for os_log; 'get_app_container'; 'ui appearance/content_size' and 'spawn defaults write -g AppleLanguages' for dark mode, Dynamic Type and language checks (restored afterwards)",
@@ -56,12 +63,16 @@
       "ruby": "parse docker-compose.yml as YAML (no Docker available)",
       "shellcheck": "lint scripts/verify-docker.sh",
       "kill": "send SIGTERM to imitate docker stop",
-      "docker": "NOT available on this machine (not installed); scripts/verify-docker.sh is ready for when it is",
-      "plutil": "read Info.plist of the built app and the app's preferences plist in the simulator"
+      "docker": "NOT available on this machine (not installed); scripts/verify-docker.sh runs in GitHub Actions instead",
+      "plutil": "read Info.plist of the built app and the app's preferences plist in the simulator",
+      "actionlint": "lint .github/workflows/ci.yml"
     },
     "frameworks_for_tests": {
       "Swift Testing": "all iOS and server tests",
       "VaporTesting": "in-process HTTP tests of the server endpoints"
+    },
+    "ci": {
+      "GitHub Actions": "server tests in swift:6.4-noble on ubuntu-latest, Docker Compose end-to-end check (scripts/verify-docker.sh), iOS tests on macos-26 simulator"
     }
   },
   "test_destination": "existing iPhone 17 Pro simulator (D6B088C2), reused for tests and manual checks, never created by the agent, shut down afterwards",

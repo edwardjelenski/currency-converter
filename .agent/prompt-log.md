@@ -425,3 +425,76 @@ TestDoubles, ServerRatesAPITests, RateHistoryViewModelTests, FavoritesTests}.swi
 
 **Коммиты:** `58b121e` Share cross-rate test vectors between server and iOS ·
 `e8accfe` Cover remaining API client and view model cases · Document shared test vectors
+
+---
+
+## 13. 2026-11-19 02:40 (время восстановлено по коммиту)
+
+**Запрос:**
+
+```text
+github actions джоба сервера (swift test на linux или docker build + тесты) и джоба ios (xcodegen generate + тесты на симуляторе). запушь и проверь через gh что зеленое, если упало разберись
+```
+
+**Что сделано:**
+- `.github/workflows/ci.yml`, три джобы:
+  - сервер: `swift build --build-tests` + `swift test` в контейнере `swift:6.4-noble` с кэшем `.build`;
+  - Docker Compose: `scripts/verify-docker.sh` (с нуля → healthy → down/up → данные на месте);
+  - iOS: `macos-26`, `xcodegen generate`, самый новый iPhone-симулятор, `xcodebuild test`, xcresult при падении.
+- Workflow проверен `actionlint`, в README добавлен бейдж CI.
+- Запуск `44423686278` за ~8 минут, все три джобы зелёные с первой попытки:
+  - Linux: 54 теста;
+  - iOS: 88 тестов (Xcode 26.6, iOS 26.5);
+  - Docker: healthy, 255 дней курсов пережили down/up. Это первая настоящая проверка Compose (локально Docker нет).
+- Ошибок агента на этом шаге не было.
+
+**Файлы:** `.github/workflows/ci.yml`, `README.md`, `.agent/*`
+
+**Коммиты:** `0192034` Add GitHub Actions CI: server on Linux, Docker Compose, iOS
+
+---
+
+## 14. 2026-11-19 02:55
+
+**Запрос:**
+
+```text
+сделай ревью всего кода как чужого PR - сервер и ios: concurrency, force unwrap, retain cycles, обработка ошибок, мертвый код, accessibility. сначала покажи список найденного, потом правь
+```
+
+**Что сделано:**
+- Ревью провели два независимых субагента без контекста разработки (сервер и iOS). Основной агент
+  проверил каждую находку по коду и показал список: 19 по серверу, 29 по iOS, retain cycles нет.
+- Список с решениями записан в `docs/code-review.md`.
+- Сервер исправлен (S1–S19):
+  - падение при `SYNC_TIME` ≥ 19:00;
+  - упавший стартовый синк теперь повторяется (1–60 мин);
+  - зависший `running` помечается `interrupted`, остановка ждёт синк;
+  - синк только для `serve`;
+  - безопасный текст ошибок в `/health`;
+  - одна транзакция курсов и статуса синка;
+  - явные зависимости `SQLKit`/`Logging`, мёртвый код удалён.
+  - 13 регрессионных тестов, всего 67.
+- iOS исправлен (I1–I29):
+  - общий перевод ошибок в локализованные сообщения;
+  - дата публикации — локальный день, курс — значащими цифрами;
+  - «—» вместо «Нет курса» при пустой сумме;
+  - спиннер до первой загрузки;
+  - pull-to-refresh ждёт текущее обновление;
+  - запасная пара без X → X;
+  - доступность: Audio Graph, флаги не читаются, объявление офлайна, Reduce Motion, контрастные цвета, 44 pt;
+  - без force unwrap;
+  - `AmountParser` («0.125», апострофы);
+  - кэш в памяти.
+  - Тестов 99 (было 88), ru-перевод 72/72 по `-exportLocalizations`.
+- Не исправлено, с обоснованием в документе: Release на localhost (нет продового сервера), «Try Again»
+  в конвертере, очистка временных файлов в превью (только Debug).
+- В `architecture.md` удалён оставшийся кусок старой таблицы, обновлены «Тестирование» и «Текущее состояние».
+
+**Файлы:** сервер — `src/server/App/**` (12 файлов), `Package.swift`, `tests/server/{ReviewFixTests,TestSupport,
+EndpointTests,RatesSyncServiceTests}.swift`; iOS — 21 файл в `src/ios/CurrencyConverter/**`, новый
+`utils/UserFacingError.swift`, `tests/ios/*` (7 файлов, новый `UserFacingErrorTests.swift`); `docs/code-review.md`,
+`docs/architecture.md`, `docs/screenshots/review/`, `README.md`, `PROMPTS.md`, `REFLECTION.md`, `.agent/*`
+
+**Коммиты:** `cfdcfc7` Fix server code review findings (S1–S18) · `e25fed3` Fix iOS code review findings (I1–I29) ·
+Add code review report and update docs
